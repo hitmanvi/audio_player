@@ -271,8 +271,8 @@
             type="button"
             class="btn-control"
             title="上一曲"
-            :disabled="playlist.length === 0 || currentIndex <= 0"
-            @click="playTrack(currentIndex - 1)"
+            :disabled="!canPrev"
+            @click="playPrev"
           >
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
@@ -296,8 +296,8 @@
             type="button"
             class="btn-control"
             title="下一曲"
-            :disabled="playlist.length === 0 || currentIndex >= playlist.length - 1"
-            @click="playTrack(currentIndex + 1)"
+            :disabled="!canNext"
+            @click="playNext"
           >
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z"/>
@@ -446,6 +446,7 @@ const showHelp = ref(false)
 const leftPanelTab = ref('playlist')
 const favorites = ref([])
 const favoritesFolder = ref(null)
+const currentFavoritesIndex = ref(-1)
 const volumeControlVisible = ref(false)
 const volumeControlRef = ref(null)
 
@@ -504,10 +505,49 @@ const setFavoritesFolder = async () => {
   }
 }
 
+const canPrev = computed(() => {
+  if (currentFavoritesIndex.value >= 0) return currentFavoritesIndex.value > 0
+  return playlist.value.length > 0 && currentIndex.value > 0
+})
+
+const canNext = computed(() => {
+  if (currentFavoritesIndex.value >= 0) return currentFavoritesIndex.value < favorites.value.length - 1
+  return playlist.value.length > 0 && currentIndex.value < playlist.value.length - 1
+})
+
 const playFromFavorites = async (item) => {
+  const idx = favorites.value.findIndex((f) => f.url === item.url)
+  currentFavoritesIndex.value = idx >= 0 ? idx : -1
+  currentIndex.value = -1
   await loadTrack(item.url, item.coverUrl, item.lrcUrl)
   isPlaying.value = true
   audioEl.value?.play()
+}
+
+const playPrev = async () => {
+  if (currentFavoritesIndex.value > 0) {
+    const idx = currentFavoritesIndex.value - 1
+    currentFavoritesIndex.value = idx
+    const item = favorites.value[idx]
+    await loadTrack(item.url, item.coverUrl, item.lrcUrl)
+    isPlaying.value = true
+    audioEl.value?.play()
+  } else if (playlist.value.length > 0 && currentIndex.value > 0) {
+    await playTrack(currentIndex.value - 1)
+  }
+}
+
+const playNext = async () => {
+  if (currentFavoritesIndex.value >= 0 && currentFavoritesIndex.value < favorites.value.length - 1) {
+    const idx = currentFavoritesIndex.value + 1
+    currentFavoritesIndex.value = idx
+    const item = favorites.value[idx]
+    await loadTrack(item.url, item.coverUrl, item.lrcUrl)
+    isPlaying.value = true
+    audioEl.value?.play()
+  } else if (playlist.value.length > 0 && currentIndex.value < playlist.value.length - 1) {
+    await playTrack(currentIndex.value + 1)
+  }
 }
 
 const toggleFavorite = async () => {
@@ -640,6 +680,7 @@ const loadTrack = async (url, coverUrl, lrcUrl) => {
 
 const playTrack = async (idx) => {
   if (idx < 0 || idx >= playlist.value.length) return
+  currentFavoritesIndex.value = -1
   currentIndex.value = idx
   const item = playlist.value[idx]
   await loadTrack(item.url, item.coverUrl, item.lrcUrl)
@@ -651,6 +692,7 @@ const openFile = async () => {
   if (!window.electronAPI?.openAudioFile) return
   const result = await window.electronAPI.openAudioFile()
   if (result?.url) {
+    currentFavoritesIndex.value = -1
     playlist.value = [{ url: result.url, name: getFileName(result.url), coverUrl: result.coverUrl, lrcUrl: result.lrcUrl }]
     currentIndex.value = 0
     await loadTrack(result.url, result.coverUrl, result.lrcUrl)
@@ -674,6 +716,7 @@ const openFolder = async () => {
   if (!window.electronAPI?.openAudioFolder) return
   const result = await window.electronAPI.openAudioFolder()
   if (result?.urls?.length > 0) {
+    currentFavoritesIndex.value = -1
     const coverUrl = result.coverUrl || null
     const lrcUrls = result.lrcUrls || []
     playlist.value = result.urls.map((url, i) => ({
@@ -729,7 +772,15 @@ const onEnded = () => {
   isPlaying.value = false
   progress.value = 0
   currentTime.value = 0
-  if (playlist.value.length > 0 && currentIndex.value < playlist.value.length - 1) {
+  if (currentFavoritesIndex.value >= 0 && currentFavoritesIndex.value < favorites.value.length - 1) {
+    const idx = currentFavoritesIndex.value + 1
+    currentFavoritesIndex.value = idx
+    const item = favorites.value[idx]
+    loadTrack(item.url, item.coverUrl, item.lrcUrl).then(() => {
+      isPlaying.value = true
+      audioEl.value?.play()
+    })
+  } else if (playlist.value.length > 0 && currentIndex.value < playlist.value.length - 1) {
     playTrack(currentIndex.value + 1)
   }
 }
