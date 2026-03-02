@@ -7,47 +7,89 @@
       class="shrink-0 flex flex-col border-r border-emerald-800/60 bg-emerald-950/50 transition-all duration-300 ease-in-out overflow-hidden"
       :class="playlistCollapsed ? 'w-0 min-w-0 border-r-0' : 'w-64'"
     >
-      <div class="flex items-center justify-between px-4 py-2.5 border-b border-emerald-800/50 shrink-0 w-64">
-        <h2 class="text-xs font-semibold uppercase tracking-widest text-emerald-400/90">播放列表</h2>
-        <button
-          type="button"
-          class="p-1.5 rounded-md text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
-          title="收起播放列表"
-          @click="playlistCollapsed = true"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-          </svg>
-        </button>
-      </div>
       <div class="playlist-scroll flex-1 min-h-0 overflow-y-auto w-64 shrink-0 py-2 px-2">
-        <template v-if="playlist.length > 0">
+        <template v-if="filteredPlaylist.length > 0">
           <button
-            v-for="(item, idx) in playlist"
-            :key="item.url"
+            v-for="(entry, idx) in filteredPlaylist"
+            :key="entry.item.url"
             type="button"
             class="w-full text-left px-3 py-2.5 rounded-lg text-sm truncate transition-all duration-200 flex items-center gap-3 group"
-            :class="idx === currentIndex ? 'bg-emerald-500/25 text-emerald-200 shadow-sm' : 'text-emerald-400/70 hover:bg-emerald-800/30 hover:text-emerald-300'"
-            @click="playTrack(idx)"
+            :class="entry.originalIndex === currentIndex ? 'bg-emerald-500/25 text-emerald-200 shadow-sm' : 'text-emerald-400/70 hover:bg-emerald-800/30 hover:text-emerald-300'"
+            @click="playTrack(entry.originalIndex)"
           >
             <span
               class="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-colors"
-              :class="idx === currentIndex ? 'bg-emerald-500/40 text-emerald-200' : 'bg-emerald-800/50 text-emerald-500/80 group-hover:bg-emerald-700/50'"
+              :class="entry.originalIndex === currentIndex ? 'bg-emerald-500/40 text-emerald-200' : 'bg-emerald-800/50 text-emerald-500/80 group-hover:bg-emerald-700/50'"
             >
-              <svg v-if="idx === currentIndex && isPlaying" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <svg v-if="entry.originalIndex === currentIndex && isPlaying" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
               </svg>
               <template v-else>{{ idx + 1 }}</template>
             </span>
-            <span class="truncate flex-1 min-w-0">{{ item.name }}</span>
+            <span class="truncate flex-1 min-w-0">{{ entry.item.name }}</span>
           </button>
         </template>
         <div v-else class="flex flex-col items-center justify-center py-12 px-4 text-center">
           <svg class="w-12 h-12 text-emerald-700/60 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 6l12-3M9 6v13"/>
           </svg>
-          <p class="text-emerald-500/80 text-sm">暂无曲目</p>
-          <p class="text-emerald-600/70 text-xs mt-1">打开文件或文件夹添加</p>
+          <p class="text-emerald-500/80 text-sm">{{ playlist.length > 0 ? '无匹配结果' : '暂无曲目' }}</p>
+          <p v-if="playlist.length === 0" class="text-emerald-600/70 text-xs mt-1">打开文件或文件夹添加</p>
+        </div>
+      </div>
+      <div class="flex flex-col gap-2 px-3 py-2.5 border-t border-emerald-800/50 shrink-0 w-64">
+        <p class="text-xs text-emerald-500/80 truncate">
+          <template v-if="playlist.length > 0">
+            <span v-if="playlistSearchQuery.trim()">匹配 {{ filteredPlaylist.length }} 首</span>
+            <span v-else>共 {{ playlist.length }} 首</span>
+            <template v-if="currentIndex >= 0 && currentIndex < playlist.length">
+              <span class="text-emerald-600/60 mx-1">·</span>
+              <span class="text-emerald-400/90">第 {{ currentIndex + 1 }} 首</span>
+            </template>
+          </template>
+          <span v-else>暂无曲目</span>
+        </p>
+        <div class="w-full">
+          <input
+            v-model="playlistSearchQuery"
+            type="text"
+            placeholder="搜索曲目..."
+            class="w-full px-3 py-1.5 text-sm rounded-lg bg-emerald-900/50 border border-emerald-800/50 text-emerald-200 placeholder-emerald-600 focus:outline-none focus:border-emerald-600"
+          />
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              class="p-2 rounded-lg text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
+              title="打开文件"
+              @click="openFile"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="p-2 rounded-lg text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
+              title="打开文件夹"
+              @click="openFolder"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+              </svg>
+            </button>
+          </div>
+          <button
+            type="button"
+            class="p-1.5 rounded-md text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
+            title="收起播放列表"
+            @click="playlistCollapsed = true"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
         </div>
       </div>
     </aside>
@@ -136,26 +178,6 @@
         <div class="flex items-center justify-center gap-2 flex-wrap">
           <button
             type="button"
-            class="p-2 rounded-full text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/50 transition-colors"
-            title="打开文件"
-            @click="openFile"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-            </svg>
-          </button>
-          <button
-            type="button"
-            class="p-2 rounded-full text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/50 transition-colors"
-            title="打开文件夹"
-            @click="openFolder"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-            </svg>
-          </button>
-          <button
-            type="button"
             class="p-2 rounded-full transition-colors"
             :title="showLyrics ? '切换到唱片' : '切换到歌词'"
             @click="showLyrics = !showLyrics"
@@ -195,6 +217,16 @@
               class="w-16 h-1.5 rounded-full appearance-none cursor-pointer bg-emerald-800 accent-emerald-400"
             />
           </div>
+          <button
+            type="button"
+            class="p-2 rounded-full text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/50 transition-colors"
+            title="使用说明"
+            @click="showHelp = true"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </button>
         </div>
         <div>
           <input
@@ -213,11 +245,49 @@
         </div>
       </div>
     </main>
+
+    <!-- 说明弹窗 -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div
+          v-if="showHelp"
+          class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-emerald-950/90"
+          @click.self="showHelp = false"
+        >
+          <div class="bg-emerald-900 border border-emerald-700 rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-emerald-700">
+              <h2 class="text-lg font-medium text-emerald-200">使用说明</h2>
+              <button
+                type="button"
+                class="p-1 rounded-lg text-emerald-400 hover:text-emerald-200 hover:bg-emerald-800 transition-colors"
+                @click="showHelp = false"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            <div class="px-6 py-4 overflow-y-auto text-sm text-emerald-300 space-y-4">
+              <p><strong class="text-emerald-200">打开文件</strong>：点击文件图标，选择单个音频文件播放。</p>
+              <p><strong class="text-emerald-200">打开文件夹</strong>：点击文件夹图标，选择目录后自动加载其中所有音频文件（含子目录），并生成播放列表。</p>
+              <p><strong class="text-emerald-200">播放/暂停</strong>：点击中央绿色按钮。</p>
+              <p><strong class="text-emerald-200">唱片/歌词</strong>：点击图标切换唱片封面或歌词显示。</p>
+              <p><strong class="text-emerald-200">进度条</strong>：可拖动跳转到指定位置。</p>
+              <p><strong class="text-emerald-200">音量</strong>：右侧滑块调节音量大小。</p>
+              <p><strong class="text-emerald-200">播放列表</strong>：加载文件夹后显示，点击曲目可切换播放；当前曲目结束后自动播放下一首。</p>
+              <p class="pt-2 border-t border-emerald-700 text-emerald-400">
+                <strong class="text-emerald-300">支持格式</strong>：MP3、WAV、OGG、M4A、FLAC、AAC
+              </p>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 
 const audioEl = ref(null)
 const currentSrc = ref('')
@@ -237,6 +307,16 @@ const currentLyricIndex = ref(-1)
 const lyricsLoaded = ref(false)
 const lyricsContainer = ref(null)
 const showLyrics = ref(false)
+const showHelp = ref(false)
+const playlistSearchQuery = ref('')
+
+const filteredPlaylist = computed(() => {
+  const q = playlistSearchQuery.value.trim().toLowerCase()
+  if (!q) return playlist.value.map((item, i) => ({ item, originalIndex: i }))
+  return playlist.value
+    .map((item, i) => ({ item, originalIndex: i }))
+    .filter(({ item }) => item.name.toLowerCase().includes(q))
+})
 
 const getFileName = (url) => {
   try {
@@ -536,5 +616,14 @@ watch(volume, (v) => {
   border-radius: 50%;
   background: radial-gradient(circle at 35% 35%, #022c22, #011c15);
   box-shadow: inset 0 1px 3px rgba(52,211,153,0.06), 0 1px 2px rgba(0,0,0,0.6);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
