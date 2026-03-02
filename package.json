@@ -13,6 +13,7 @@
     "start": "electron ."
   },
   "dependencies": {
+    "music-metadata": "^10.1.0",
     "vue": "^3.4.21"
   },
   "devDependencies": {

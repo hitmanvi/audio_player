@@ -2,13 +2,31 @@
   <div class="flex h-full overflow-hidden">
     <audio ref="audioEl" :src="currentBlobUrl" @loadedmetadata="onLoadedMetadata" @timeupdate="onTimeUpdate" @ended="onEnded" @play="isPlaying = true" @pause="isPlaying = false" />
 
-    <!-- 播放列表 - 左侧独立区域 -->
+    <!-- 播放列表 / 收藏 - 左侧独立区域 -->
     <aside
       class="shrink-0 flex flex-col border-r border-emerald-800/60 bg-emerald-950/50 transition-all duration-300 ease-in-out overflow-hidden"
       :class="playlistCollapsed ? 'w-0 min-w-0 border-r-0' : 'w-64'"
     >
+      <div class="flex border-b border-emerald-800/50 shrink-0 w-64">
+        <button
+          type="button"
+          class="flex-1 py-2 text-xs font-medium transition-colors"
+          :class="leftPanelTab === 'playlist' ? 'bg-emerald-800/50 text-emerald-200' : 'text-emerald-500/80 hover:text-emerald-300'"
+          @click="leftPanelTab = 'playlist'"
+        >
+          播放列表
+        </button>
+        <button
+          type="button"
+          class="flex-1 py-2 text-xs font-medium transition-colors"
+          :class="leftPanelTab === 'favorites' ? 'bg-emerald-800/50 text-emerald-200' : 'text-emerald-500/80 hover:text-emerald-300'"
+          @click="leftPanelTab = 'favorites'; loadFavorites()"
+        >
+          收藏
+        </button>
+      </div>
       <div class="playlist-scroll flex-1 min-h-0 overflow-y-auto w-64 shrink-0 py-2 px-2">
-        <template v-if="filteredPlaylist.length > 0">
+        <template v-if="leftPanelTab === 'playlist' && filteredPlaylist.length > 0">
           <button
             v-for="(entry, idx) in filteredPlaylist"
             :key="entry.item.url"
@@ -29,27 +47,68 @@
             <span class="truncate flex-1 min-w-0">{{ stripExt(entry.item.name) }}</span>
           </button>
         </template>
+        <template v-else-if="leftPanelTab === 'favorites' && favorites.length > 0">
+          <div
+            v-for="(item, idx) in favorites"
+            :key="item.url"
+            class="group/item w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-all duration-200"
+            :class="currentSrc === item.url ? 'bg-emerald-500/25' : 'hover:bg-emerald-800/30'"
+          >
+            <button
+              type="button"
+              class="flex-1 min-w-0 flex items-center gap-3 text-left truncate"
+              :class="currentSrc === item.url ? 'text-emerald-200' : 'text-emerald-400/70 group-hover/item:text-emerald-300'"
+              @click="playFromFavorites(item)"
+            >
+              <span class="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-emerald-500/80 bg-emerald-800/50">
+                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+              </span>
+              <span class="truncate flex-1 min-w-0">{{ stripExt(item.name) }}</span>
+            </button>
+            <button
+              type="button"
+              class="shrink-0 p-1 rounded text-emerald-500/50 hover:text-red-400 hover:bg-red-500/20 transition-colors"
+              title="取消收藏"
+              @click.stop="removeFromFavorites(item)"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+          </div>
+        </template>
         <div v-else class="flex flex-col items-center justify-center py-12 px-4 text-center">
           <svg class="w-12 h-12 text-emerald-700/60 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 6l12-3M9 6v13"/>
           </svg>
-          <p class="text-emerald-500/80 text-sm">{{ playlist.length > 0 ? '无匹配结果' : '暂无曲目' }}</p>
-          <p v-if="playlist.length === 0" class="text-emerald-600/70 text-xs mt-1">打开文件或文件夹添加</p>
+          <p class="text-emerald-500/80 text-sm">
+            {{ leftPanelTab === 'favorites' ? (favoritesFolder ? '暂无收藏' : '请先设置收藏文件夹') : (playlist.length > 0 ? '无匹配结果' : '暂无曲目') }}
+          </p>
+          <p v-if="leftPanelTab === 'playlist' && playlist.length === 0" class="text-emerald-600/70 text-xs mt-1">打开文件或文件夹添加</p>
+          <p v-if="leftPanelTab === 'favorites' && !favoritesFolder" class="text-emerald-600/70 text-xs mt-1">点击下方文件夹图标设置</p>
         </div>
       </div>
       <div class="flex flex-col gap-2 px-3 py-2.5 border-t border-emerald-800/50 shrink-0 w-64">
         <p class="text-xs text-emerald-500/80 truncate">
-          <template v-if="playlist.length > 0">
-            <span v-if="playlistSearchQuery.trim()">匹配 {{ filteredPlaylist.length }} 首</span>
-            <span v-else>共 {{ playlist.length }} 首</span>
-            <template v-if="currentIndex >= 0 && currentIndex < playlist.length">
-              <span class="text-emerald-600/60 mx-1">·</span>
-              <span class="text-emerald-400/90">第 {{ currentIndex + 1 }} 首</span>
+          <template v-if="leftPanelTab === 'playlist'">
+            <template v-if="playlist.length > 0">
+              <span v-if="playlistSearchQuery.trim()">匹配 {{ filteredPlaylist.length }} 首</span>
+              <span v-else>共 {{ playlist.length }} 首</span>
+              <template v-if="currentIndex >= 0 && currentIndex < playlist.length">
+                <span class="text-emerald-600/60 mx-1">·</span>
+                <span class="text-emerald-400/90">第 {{ currentIndex + 1 }} 首</span>
+              </template>
             </template>
+            <span v-else>暂无曲目</span>
           </template>
-          <span v-else>暂无曲目</span>
+          <template v-else>
+            <span v-if="favoritesFolder">共 {{ favorites.length }} 首</span>
+            <span v-else>未设置收藏文件夹</span>
+          </template>
         </p>
-        <div class="w-full">
+        <div v-if="leftPanelTab === 'playlist'" class="w-full">
           <input
             v-model="playlistSearchQuery"
             type="text"
@@ -59,31 +118,45 @@
         </div>
         <div class="flex items-center justify-between gap-2">
           <div class="flex items-center gap-1">
-            <button
-              type="button"
-              class="p-2 rounded-lg text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
-              title="打开文件"
-              @click="openFile"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-              </svg>
-            </button>
-            <button
-              type="button"
-              class="p-2 rounded-lg text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
-              title="打开文件夹"
-              @click="openFolder"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-              </svg>
-            </button>
+            <template v-if="leftPanelTab === 'playlist'">
+              <button
+                type="button"
+                class="p-2 rounded-lg text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
+                title="打开文件"
+                @click="openFile"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="p-2 rounded-lg text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
+                title="打开文件夹"
+                @click="openFolder"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                </svg>
+              </button>
+            </template>
+            <template v-else>
+              <button
+                type="button"
+                class="p-2 rounded-lg text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
+                title="设置收藏文件夹"
+                @click="setFavoritesFolder"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                </svg>
+              </button>
+            </template>
           </div>
           <button
             type="button"
             class="p-1.5 rounded-md text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
-            title="收起播放列表"
+            title="收起"
             @click="playlistCollapsed = true"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -170,15 +243,19 @@
         </div>
       </div>
 
-      <!-- 控制区：文件名 + 按钮 + 进度条 -->
+      <!-- 控制区：元信息 + 按钮 + 进度条 -->
       <div class="w-full max-w-sm mt-auto pt-3 border-t border-emerald-800/50 flex flex-col gap-3">
-        <p class="text-center text-emerald-400/90 text-xs truncate px-2">
-          {{ currentFileName || '未选择音频文件' }}
-        </p>
+        <div class="text-center px-2 min-h-[2.5rem]">
+          <template v-if="trackMetadata?.title || trackMetadata?.artist">
+            <p class="text-emerald-300 text-sm font-medium truncate">{{ trackMetadata.title || currentFileName }}</p>
+            <p class="text-emerald-500/80 text-xs truncate">{{ [trackMetadata.artist, trackMetadata.album].filter(Boolean).join(' · ') }}</p>
+          </template>
+          <p v-else class="text-emerald-400/90 text-xs truncate">{{ currentFileName || '未选择音频文件' }}</p>
+        </div>
         <div class="flex items-center justify-center gap-2 flex-wrap">
           <button
             type="button"
-            class="p-2 rounded-full transition-colors"
+            class="btn-control"
             :title="showLyrics ? '切换到唱片' : '切换到歌词'"
             @click="showLyrics = !showLyrics"
           >
@@ -192,7 +269,18 @@
           </button>
           <button
             type="button"
-            class="p-2 rounded-full bg-emerald-400 hover:bg-emerald-300 text-emerald-950 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            class="btn-control"
+            title="上一曲"
+            :disabled="playlist.length === 0 || currentIndex <= 0"
+            @click="playTrack(currentIndex - 1)"
+          >
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="btn-control btn-control--primary"
             :title="isPlaying ? '暂停' : '播放'"
             :disabled="!currentBlobUrl"
             @click="togglePlay"
@@ -204,22 +292,67 @@
               <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
             </svg>
           </button>
-          <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+          <button
+            type="button"
+            class="btn-control"
+            title="下一曲"
+            :disabled="playlist.length === 0 || currentIndex >= playlist.length - 1"
+            @click="playTrack(currentIndex + 1)"
+          >
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z"/>
             </svg>
-            <input
-              v-model.number="volume"
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              class="w-16 h-1.5 rounded-full appearance-none cursor-pointer bg-emerald-800 accent-emerald-400"
-            />
+          </button>
+          <div ref="volumeControlRef" class="relative flex items-center">
+            <button
+              type="button"
+              class="btn-control"
+              :class="volumeControlVisible ? 'btn-control--active' : ''"
+              title="音量"
+              @click="volumeControlVisible = !volumeControlVisible"
+            >
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+              </svg>
+            </button>
+            <Transition name="fade">
+              <div
+                v-show="volumeControlVisible"
+                class="volume-popover absolute bottom-full mb-2 left-1/2 -translate-x-1/2 flex items-center justify-center rounded-lg bg-emerald-900/90 border border-emerald-800/50 shadow-lg"
+              >
+                <div class="volume-slider-wrap">
+                  <input
+                    v-model.number="volume"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    class="volume-slider-vertical"
+                    @click.stop
+                  />
+                </div>
+              </div>
+            </Transition>
           </div>
           <button
             type="button"
-            class="p-2 rounded-full text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/50 transition-colors"
+            class="btn-control"
+            :title="isCurrentInFavorites ? '取消收藏' : '添加到收藏'"
+            :disabled="!currentBlobUrl || !currentSrc?.startsWith('local-file://')"
+            @click="toggleFavorite"
+          >
+            <svg
+              class="w-5 h-5"
+              :class="isCurrentInFavorites ? 'fill-current text-red-400' : 'fill-none'"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="btn-control"
             title="使用说明"
             @click="showHelp = true"
           >
@@ -275,6 +408,7 @@
               <p><strong class="text-emerald-200">进度条</strong>：可拖动跳转到指定位置。</p>
               <p><strong class="text-emerald-200">音量</strong>：右侧滑块调节音量大小。</p>
               <p><strong class="text-emerald-200">播放列表</strong>：加载文件夹后显示，点击曲目可切换播放；当前曲目结束后自动播放下一首。</p>
+              <p><strong class="text-emerald-200">收藏</strong>：点击心形按钮将当前曲目复制到收藏文件夹；需先设置收藏文件夹。</p>
               <p class="pt-2 border-t border-emerald-700 text-emerald-400">
                 <strong class="text-emerald-300">支持格式</strong>：MP3、WAV、OGG、M4A、FLAC、AAC
               </p>
@@ -287,7 +421,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
 
 const audioEl = ref(null)
 const currentSrc = ref('')
@@ -302,12 +436,34 @@ const playlist = ref([])
 const currentIndex = ref(-1)
 const coverBlobUrl = ref('')
 const playlistCollapsed = ref(false)
+const trackMetadata = ref(null)
 const lyrics = ref([])
 const currentLyricIndex = ref(-1)
 const lyricsLoaded = ref(false)
 const lyricsContainer = ref(null)
 const showLyrics = ref(false)
 const showHelp = ref(false)
+const leftPanelTab = ref('playlist')
+const favorites = ref([])
+const favoritesFolder = ref(null)
+const volumeControlVisible = ref(false)
+const volumeControlRef = ref(null)
+
+let volumeClickOutsideHandler
+onMounted(async () => {
+  volumeClickOutsideHandler = (e) => {
+    if (volumeControlVisible.value && volumeControlRef.value && !volumeControlRef.value.contains(e.target)) {
+      volumeControlVisible.value = false
+    }
+  }
+  document.addEventListener('click', volumeClickOutsideHandler)
+  if (window.electronAPI?.getFavoritesFolder) {
+    favoritesFolder.value = await window.electronAPI.getFavoritesFolder()
+  }
+})
+onUnmounted(() => {
+  if (volumeClickOutsideHandler) document.removeEventListener('click', volumeClickOutsideHandler)
+})
 const playlistSearchQuery = ref('')
 
 const filteredPlaylist = computed(() => {
@@ -327,6 +483,55 @@ const getFileName = (url) => {
 }
 
 const stripExt = (name) => name.replace(/\.[^.]+$/, '') || name
+
+const isCurrentInFavorites = computed(() =>
+  currentSrc.value && favorites.value.some((f) => getFileName(f.url) === getFileName(currentSrc.value))
+)
+
+const loadFavorites = async () => {
+  if (!window.electronAPI?.getFavoritesList) return
+  favorites.value = await window.electronAPI.getFavoritesList()
+  const folder = await window.electronAPI.getFavoritesFolder()
+  favoritesFolder.value = folder
+}
+
+const setFavoritesFolder = async () => {
+  if (!window.electronAPI?.setFavoritesFolder) return
+  const folder = await window.electronAPI.setFavoritesFolder()
+  if (folder) {
+    favoritesFolder.value = folder
+    await loadFavorites()
+  }
+}
+
+const playFromFavorites = async (item) => {
+  await loadTrack(item.url, item.coverUrl, item.lrcUrl)
+  isPlaying.value = true
+  audioEl.value?.play()
+}
+
+const toggleFavorite = async () => {
+  if (!currentSrc.value?.startsWith('local-file://')) return
+  if (isCurrentInFavorites.value) {
+    const item = favorites.value.find((f) => getFileName(f.url) === getFileName(currentSrc.value))
+    if (item) await removeFromFavorites(item)
+  } else {
+    if (!window.electronAPI?.addToFavorites) return
+    const result = await window.electronAPI.addToFavorites(currentSrc.value)
+    if (result?.ok) await loadFavorites()
+    else if (result?.error) alert(result.error)
+  }
+}
+
+const removeFromFavorites = async (item) => {
+  if (!window.electronAPI?.removeFromFavorites) return
+  const result = await window.electronAPI.removeFromFavorites(item.url)
+  if (result?.ok) {
+    await loadFavorites()
+  } else if (result?.error) {
+    alert(result.error)
+  }
+}
 
 function parseLrc(text) {
   const lines = []
@@ -399,6 +604,7 @@ const loadCover = async (coverUrl) => {
 }
 
 const loadTrack = async (url, coverUrl, lrcUrl) => {
+  trackMetadata.value = null
   if (currentBlobUrl.value) {
     URL.revokeObjectURL(currentBlobUrl.value)
     currentBlobUrl.value = ''
@@ -414,6 +620,10 @@ const loadTrack = async (url, coverUrl, lrcUrl) => {
     coverBlobUrl.value = ''
   }
   if (url && url.startsWith('local-file://')) {
+    try {
+      const meta = await window.electronAPI?.getAudioMetadata?.(url)
+      if (meta) trackMetadata.value = meta
+    } catch (_) {}
     try {
       const res = await fetch(url)
       if (!res.ok) throw new Error(res.statusText)
@@ -627,5 +837,92 @@ watch(volume, (v) => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.btn-control {
+  padding: 0.625rem;
+  border-radius: 9999px;
+  transition: color 0.2s, background-color 0.2s;
+  background-color: rgb(6 95 70 / 0.6);
+  color: rgb(110 231 183);
+}
+.btn-control:hover {
+  background-color: rgb(4 120 87 / 0.6);
+  color: rgb(167 243 208);
+}
+.btn-control:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-control:disabled:hover {
+  background-color: rgb(6 95 70 / 0.6);
+  color: rgb(110 231 183);
+}
+.btn-control--primary {
+  background-color: rgb(52 211 153);
+  color: rgb(2 44 34);
+}
+.btn-control--primary:hover {
+  background-color: rgb(74 222 128);
+}
+.btn-control--primary:disabled {
+  opacity: 0.5;
+}
+.btn-control--active {
+  background-color: rgb(4 120 87 / 0.6);
+  color: rgb(167 243 208);
+}
+
+.volume-popover {
+  padding: 16px 12px;
+}
+
+.volume-slider-wrap {
+  position: relative;
+  width: 6px;
+  height: 100px;
+}
+
+.volume-slider-vertical {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100px;
+  height: 6px;
+  margin-left: -50px;
+  margin-top: -3px;
+  transform: rotate(-90deg);
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border-radius: 9999px;
+}
+.volume-slider-vertical::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: #065f46;
+}
+.volume-slider-vertical::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: #34d399;
+  cursor: pointer;
+}
+.volume-slider-vertical::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: #065f46;
+}
+.volume-slider-vertical::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #34d399;
+  cursor: pointer;
+  border: none;
 }
 </style>

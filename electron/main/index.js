@@ -3,6 +3,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { TextDecoder } from 'node:util'
+import { parseFile } from 'music-metadata'
 
 /** 解码 LRC 文本，优先 UTF-8，失败则尝试 GBK（常见于中文歌词） */
 function decodeLrcBuffer(buf) {
@@ -101,6 +102,26 @@ function scanDirForAudio(dirPath) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 process.env.APP_ROOT = path.join(__dirname, '../..')
+
+const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json')
+
+function loadConfig() {
+  try {
+    const data = fs.readFileSync(CONFIG_PATH, 'utf-8')
+    return JSON.parse(data)
+  } catch {
+    return {}
+  }
+}
+
+function saveConfig(config) {
+  try {
+    fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true })
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
+  } catch (err) {
+    console.error('saveConfig error:', err)
+  }
+}
 const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 
@@ -187,6 +208,116 @@ ipcMain.handle('open-audio-folder', async () => {
     }
   }
   return null
+})
+
+// 获取音频元数据
+ipcMain.handle('get-audio-metadata', async (_, fileUrl) => {
+  try {
+    const filePath = fileURLToPath(fileUrl.replace(/^local-file:/, 'file:'))
+    if (!fs.existsSync(filePath)) return null
+    const metadata = await parseFile(filePath)
+    const common = metadata.common || {}
+    return {
+      title: common.title,
+      artist: common.artist,
+      album: common.album,
+      year: common.year,
+      genre: common.genre?.[0],
+    }
+  } catch (err) {
+    console.error('get-audio-metadata error:', err)
+    return null
+  }
+})
+
+// 收藏：获取收藏文件夹路径
+ipcMain.handle('get-favorites-folder', async () => {
+  const config = loadConfig()
+  return config.favoritesFolder || null
+})
+
+// 收藏：设置收藏文件夹路径
+ipcMain.handle('set-favorites-folder', async () => {
+  const win = mainWindow ?? BrowserWindow.getFocusedWindow()
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: '选择收藏文件夹',
+  })
+  if (!result.canceled && result.filePaths.length > 0) {
+    const folder = result.filePaths[0]
+    const config = loadConfig()
+    config.favoritesFolder = folder
+    saveConfig(config)
+    return folder
+  }
+  return null
+})
+
+// 收藏：添加当前文件到收藏（复制到收藏文件夹）
+ipcMain.handle('add-to-favorites', async (_, fileUrl) => {
+  const config = loadConfig()
+  const folder = config.favoritesFolder
+  if (!folder || !fs.existsSync(folder)) {
+    return { ok: false, error: '请先设置收藏文件夹' }
+  }
+  try {
+    const filePath = fileURLToPath(fileUrl.replace(/^local-file:/, 'file:'))
+    if (!fs.existsSync(filePath)) return { ok: false, error: '文件不存在' }
+    const baseName = path.basename(filePath)
+    let destPath = path.join(folder, baseName)
+    let counter = 1
+    while (fs.existsSync(destPath)) {
+      const ext = path.extname(baseName)
+      const nameWithoutExt = path.basename(baseName, ext)
+      destPath = path.join(folder, `${nameWithoutExt}_${counter}${ext}`)
+      counter++
+    }
+    fs.copyFileSync(filePath, destPath)
+    const lrcPath = findLrcForFile(filePath)
+    if (lrcPath && fs.existsSync(lrcPath)) {
+      const lrcBase = path.basename(lrcPath)
+      const lrcDest = path.join(folder, lrcBase)
+      if (!fs.existsSync(lrcDest)) fs.copyFileSync(lrcPath, lrcDest)
+    }
+    return { ok: true, url: toLocalFileUrl(destPath) }
+  } catch (err) {
+    console.error('add-to-favorites error:', err)
+    return { ok: false, error: err.message }
+  }
+})
+
+// 收藏：获取收藏列表
+ipcMain.handle('get-favorites-list', async () => {
+  const config = loadConfig()
+  const folder = config.favoritesFolder
+  if (!folder || !fs.existsSync(folder)) return []
+  const paths = scanDirForAudio(folder)
+  const coverPath = findCoverInDir(folder)
+  return paths.map((p) => {
+    const lrc = findLrcForFile(p)
+    return {
+      url: toLocalFileUrl(p),
+      name: path.basename(p),
+      coverUrl: coverPath ? toLocalFileUrl(coverPath) : null,
+      lrcUrl: lrc ? toLocalFileUrl(lrc) : null,
+    }
+  })
+})
+
+// 收藏：从收藏中移除（删除文件）
+ipcMain.handle('remove-from-favorites', async (_, fileUrl) => {
+  try {
+    const filePath = fileURLToPath(fileUrl.replace(/^local-file:/, 'file:'))
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath)
+      const lrcPath = findLrcForFile(filePath)
+      if (lrcPath && fs.existsSync(lrcPath)) fs.unlinkSync(lrcPath)
+    }
+    return { ok: true }
+  } catch (err) {
+    console.error('remove-from-favorites error:', err)
+    return { ok: false, error: err.message }
+  }
 })
 
 app.whenReady().then(async () => {
