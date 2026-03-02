@@ -52,8 +52,8 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
         </svg>
       </button>
-      <!-- 点唱机 / 歌词 切换区域 -->
-      <div class="w-[160px] h-[160px] mb-2 flex flex-col">
+      <!-- 点唱机 / 歌词 区域 -->
+      <div class="w-[200px] h-[240px] flex flex-col">
         <div class="flex-1 min-h-0 w-full overflow-hidden flex items-center justify-center">
           <!-- 点唱机唱片 -->
           <div
@@ -112,34 +112,14 @@
             <p v-else class="text-emerald-600/80 text-xs text-center">加载歌词中…</p>
           </div>
         </div>
-        <div class="flex gap-1 mt-2 justify-center">
-          <button
-            type="button"
-            class="px-3 py-1 text-xs rounded transition-colors"
-            :class="!showLyrics ? 'bg-emerald-600 text-emerald-950' : 'text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/50'"
-            @click="showLyrics = false"
-          >
-            唱片
-          </button>
-          <button
-            type="button"
-            class="px-3 py-1 text-xs rounded transition-colors"
-            :class="showLyrics ? 'bg-emerald-600 text-emerald-950' : 'text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/50'"
-            @click="showLyrics = true"
-          >
-            歌词
-          </button>
-        </div>
       </div>
 
-      <!-- 文件名 -->
-      <p class="text-center text-emerald-400/90 text-sm truncate mb-2 px-2 max-w-xs mx-auto">
-        {{ currentFileName || '未选择音频文件' }}
-      </p>
-
-      <!-- 控制区：按钮 + 进度条 -->
+      <!-- 控制区：文件名 + 按钮 + 进度条 -->
       <div class="w-full max-w-sm mt-auto pt-3 border-t border-emerald-800/50 flex flex-col gap-3">
-        <div class="flex items-center justify-center gap-2">
+        <p class="text-center text-emerald-400/90 text-xs truncate px-2">
+          {{ currentFileName || '未选择音频文件' }}
+        </p>
+        <div class="flex items-center justify-center gap-2 flex-wrap">
           <button
             type="button"
             class="p-2 rounded-full text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/50 transition-colors"
@@ -158,6 +138,20 @@
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="p-2 rounded-full transition-colors"
+            :title="showLyrics ? '切换到唱片' : '切换到歌词'"
+            @click="showLyrics = !showLyrics"
+          >
+            <svg v-if="showLyrics" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="8" stroke-width="2"/>
+              <circle cx="12" cy="12" r="2" fill="currentColor"/>
+            </svg>
+            <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
           </button>
           <button
