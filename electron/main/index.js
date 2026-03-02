@@ -5,8 +5,29 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { TextDecoder } from 'node:util'
 import { parseFile, selectCover } from 'music-metadata'
 
-/** 解码 LRC 文本，优先 UTF-8，失败则尝试 GBK（常见于中文歌词） */
-function decodeLrcBuffer(buf) {
+// ========== 常量 ==========
+const AUDIO_EXT = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac'])
+const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'])
+const COVER_NAMES = ['cover', 'folder', 'album', 'front', 'artwork', 'albumart', '.folder']
+const MIME_TYPES = {
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4', '.flac': 'audio/flac', '.aac': 'audio/aac',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+  '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+  '.lrc': 'text/plain; charset=utf-8',
+}
+
+// ========== 工具函数 ==========
+function toLocalFileUrl(filePath) {
+  return pathToFileURL(path.resolve(filePath)).href.replace(/^file:\/\//, 'local-file://')
+}
+
+function fromLocalFileUrl(fileUrl) {
+  return fileURLToPath(fileUrl.replace(/^local-file:/, 'file:'))
+}
+
+/** 解码文本，优先 UTF-8，失败则尝试 GBK（LRC/CUE 常见中文编码） */
+function decodeTextBuffer(buf) {
   try {
     const utf8 = new TextDecoder('utf-8', { fatal: true }).decode(buf)
     if (!utf8.includes('\uFFFD')) return utf8
@@ -17,47 +38,102 @@ function decodeLrcBuffer(buf) {
   return new TextDecoder('utf-8', { fatal: false }).decode(buf)
 }
 
-const AUDIO_EXT = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac'])
-const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'])
-const COVER_NAMES = ['cover', 'folder', 'album', 'front', 'artwork', 'albumart', '.folder']
-
-const MIME_TYPES = {
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg',
-  '.m4a': 'audio/mp4',
-  '.flac': 'audio/flac',
-  '.aac': 'audio/aac',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.bmp': 'image/bmp',
-  '.lrc': 'text/plain; charset=utf-8',
+/** 在音频同目录查找同名文件（扩展名） */
+function findSidecarFile(audioPath, ext) {
+  const dir = path.dirname(audioPath)
+  const base = path.basename(audioPath, path.extname(audioPath))
+  const sidecarPath = path.join(dir, `${base}${ext}`)
+  try {
+    return fs.existsSync(sidecarPath) ? sidecarPath : null
+  } catch (err) {
+    console.error(`findSidecarFile ${ext} error:`, err)
+    return null
+  }
 }
 
-// 注册自定义协议，解决 http 页面加载 file:// 被阻止的问题
+const findLrcForFile = (p) => findSidecarFile(p, '.lrc')
+const findCueForFile = (p) => findSidecarFile(p, '.cue')
+
 protocol.registerSchemesAsPrivileged([
   { scheme: 'local-file', privileges: { bypassCSP: true, supportFetchAPI: true } },
 ])
 
-function toLocalFileUrl(filePath) {
-  return pathToFileURL(path.resolve(filePath)).href.replace(/^file:\/\//, 'local-file://')
+// ========== CUE 解析 ==========
+function cueTimeToSeconds(msf) {
+  const parts = String(msf).trim().split(':')
+  if (parts.length < 3) return 0
+  const m = parseInt(parts[0], 10) || 0
+  const s = parseInt(parts[1], 10) || 0
+  const f = parseInt(parts[2], 10) || 0
+  return m * 60 + s + f / 75
 }
 
-function findLrcForFile(audioPath) {
-  const dir = path.dirname(audioPath)
-  const base = path.basename(audioPath, path.extname(audioPath))
-  const lrcPath = path.join(dir, `${base}.lrc`)
+/** 解析 CUE 文件，返回 [{ number, title, performer, start, end }]（仅取第一个 FILE 块） */
+function parseCueFile(cuePath) {
   try {
-    if (fs.existsSync(lrcPath)) return lrcPath
+    const text = decodeTextBuffer(fs.readFileSync(cuePath))
+    const lines = text.split(/\r?\n/)
+    const tracks = []
+    let currentTrack = null
+    let filePerformer = ''
+    let fileTitle = ''
+    let inFirstFile = false
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      const match = trimmed.match(/^(\w+)\s+(.+)$/)
+      if (!match) continue
+      const [, cmd, rest] = match
+      const cmdUpper = cmd.toUpperCase()
+
+      if (cmdUpper === 'FILE') {
+        if (inFirstFile) {
+          if (currentTrack) tracks.push(currentTrack)
+          break
+        }
+        inFirstFile = true
+      } else if (cmdUpper === 'TRACK' && inFirstFile) {
+        if (currentTrack) tracks.push(currentTrack)
+        const trackNum = parseInt(rest.split(/\s+/)[0], 10)
+        currentTrack = {
+          number: trackNum,
+          title: fileTitle || `曲目 ${trackNum}`,
+          performer: filePerformer,
+          start: 0,
+        }
+      } else if (cmdUpper === 'TITLE') {
+        const m = rest.match(/^"([^"]*)"$/)
+        const val = m ? m[1] : rest.replace(/^"|"$/g, '')
+        if (currentTrack) currentTrack.title = val
+        else fileTitle = val
+      } else if (cmdUpper === 'PERFORMER') {
+        const m = rest.match(/^"([^"]*)"$/)
+        const val = m ? m[1] : rest.replace(/^"|"$/g, '')
+        if (currentTrack) currentTrack.performer = val
+        else filePerformer = val
+      } else if (cmdUpper === 'INDEX' && currentTrack) {
+        const parts = rest.split(/\s+/)
+        if (parts[0] === '01' && parts[1]) {
+          currentTrack.start = cueTimeToSeconds(parts[1])
+          tracks.push(currentTrack)
+          currentTrack = null
+        }
+      }
+    }
+    if (currentTrack) tracks.push(currentTrack)
+
+    for (let i = 0; i < tracks.length; i++) {
+      tracks[i].end = i < tracks.length - 1 ? tracks[i + 1].start : Infinity
+    }
+    return tracks
   } catch (err) {
-    console.error('findLrcForFile error:', err)
+    console.error('parseCueFile error:', err)
+    return []
   }
-  return null
 }
 
+// ========== 文件系统 ==========
 function findCoverInDir(dirPath) {
   try {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true })
@@ -152,7 +228,7 @@ async function createWindow() {
   })
 }
 
-// 打开音频文件，返回 { url, coverUrl }
+// ========== IPC：文件与元数据 ==========
 ipcMain.handle('open-audio-file', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
@@ -175,7 +251,6 @@ ipcMain.handle('open-audio-file', async () => {
   return null
 })
 
-// 打开 LRC 歌词文件
 ipcMain.handle('open-lrc-file', async () => {
   const win = mainWindow ?? BrowserWindow.getFocusedWindow()
   const result = await dialog.showOpenDialog(win, {
@@ -188,7 +263,6 @@ ipcMain.handle('open-lrc-file', async () => {
   return null
 })
 
-// 打开文件夹，返回 { urls, coverUrl, lrcUrls }
 ipcMain.handle('open-audio-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
@@ -210,10 +284,21 @@ ipcMain.handle('open-audio-folder', async () => {
   return null
 })
 
-// 获取音频元数据
+ipcMain.handle('get-cue-tracks', async (_, fileUrl) => {
+  try {
+    const filePath = fromLocalFileUrl(fileUrl)
+    const cuePath = findCueForFile(filePath)
+    if (!cuePath) return []
+    return parseCueFile(cuePath)
+  } catch (err) {
+    console.error('get-cue-tracks error:', err)
+    return []
+  }
+})
+
 ipcMain.handle('get-audio-metadata', async (_, fileUrl) => {
   try {
-    const filePath = fileURLToPath(fileUrl.replace(/^local-file:/, 'file:'))
+    const filePath = fromLocalFileUrl(fileUrl)
     if (!fs.existsSync(filePath)) return null
     const metadata = await parseFile(filePath)
     const common = metadata.common || {}
@@ -238,13 +323,12 @@ ipcMain.handle('get-audio-metadata', async (_, fileUrl) => {
   }
 })
 
-// 收藏：获取收藏文件夹路径
+// ========== IPC：收藏 ==========
 ipcMain.handle('get-favorites-folder', async () => {
   const config = loadConfig()
   return config.favoritesFolder || null
 })
 
-// 收藏：设置收藏文件夹路径
 ipcMain.handle('set-favorites-folder', async () => {
   const win = mainWindow ?? BrowserWindow.getFocusedWindow()
   const result = await dialog.showOpenDialog(win, {
@@ -261,7 +345,6 @@ ipcMain.handle('set-favorites-folder', async () => {
   return null
 })
 
-// 收藏：添加当前文件到收藏（复制到收藏文件夹）
 ipcMain.handle('add-to-favorites', async (_, fileUrl) => {
   const config = loadConfig()
   const folder = config.favoritesFolder
@@ -269,7 +352,7 @@ ipcMain.handle('add-to-favorites', async (_, fileUrl) => {
     return { ok: false, error: '请先设置收藏文件夹' }
   }
   try {
-    const filePath = fileURLToPath(fileUrl.replace(/^local-file:/, 'file:'))
+    const filePath = fromLocalFileUrl(fileUrl)
     if (!fs.existsSync(filePath)) return { ok: false, error: '文件不存在' }
     const baseName = path.basename(filePath)
     let destPath = path.join(folder, baseName)
@@ -294,7 +377,6 @@ ipcMain.handle('add-to-favorites', async (_, fileUrl) => {
   }
 })
 
-// 收藏：获取收藏列表
 ipcMain.handle('get-favorites-list', async () => {
   const config = loadConfig()
   const folder = config.favoritesFolder
@@ -312,10 +394,9 @@ ipcMain.handle('get-favorites-list', async () => {
   })
 })
 
-// 收藏：从收藏中移除（删除文件）
 ipcMain.handle('remove-from-favorites', async (_, fileUrl) => {
   try {
-    const filePath = fileURLToPath(fileUrl.replace(/^local-file:/, 'file:'))
+    const filePath = fromLocalFileUrl(fileUrl)
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath)
       const lrcPath = findLrcForFile(filePath)
@@ -338,7 +419,7 @@ app.whenReady().then(async () => {
     if (ext === '.lrc') {
       try {
         const buf = fs.readFileSync(filePath)
-        const text = decodeLrcBuffer(buf)
+        const text = decodeTextBuffer(buf)
         return new Response(text, {
           headers: { 'Content-Type': 'text/plain; charset=utf-8' },
         })

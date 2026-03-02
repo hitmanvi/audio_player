@@ -17,6 +17,15 @@
           播放列表
         </button>
         <button
+          v-if="cueTracks.length > 0"
+          type="button"
+          class="flex-1 py-2 text-xs font-medium transition-colors"
+          :class="leftPanelTab === 'cue' ? 'bg-emerald-800/50 text-emerald-200' : 'text-emerald-500/80 hover:text-emerald-300'"
+          @click="leftPanelTab = 'cue'"
+        >
+          曲目
+        </button>
+        <button
           type="button"
           class="flex-1 py-2 text-xs font-medium transition-colors"
           :class="leftPanelTab === 'favorites' ? 'bg-emerald-800/50 text-emerald-200' : 'text-emerald-500/80 hover:text-emerald-300'"
@@ -45,6 +54,28 @@
               <template v-else>{{ idx + 1 }}</template>
             </span>
             <span class="truncate flex-1 min-w-0">{{ stripExt(entry.item.name) }}</span>
+          </button>
+        </template>
+        <template v-else-if="leftPanelTab === 'cue' && cueTracks.length > 0">
+          <button
+            v-for="(track, idx) in cueTracks"
+            :key="idx"
+            type="button"
+            class="w-full text-left px-3 py-2.5 rounded-lg text-sm truncate transition-all duration-200 flex items-center gap-3 group"
+            :class="idx === currentCueIndex ? 'bg-emerald-500/25 text-emerald-200 shadow-sm' : 'text-emerald-400/70 hover:bg-emerald-800/30 hover:text-emerald-300'"
+            @click="seekToCueTrack(idx)"
+          >
+            <span
+              class="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-colors"
+              :class="idx === currentCueIndex ? 'bg-emerald-500/40 text-emerald-200' : 'bg-emerald-800/50 text-emerald-500/80 group-hover:bg-emerald-700/50'"
+            >
+              <svg v-if="idx === currentCueIndex && isPlaying" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+              </svg>
+              <template v-else>{{ String(track.number).padStart(2, '0') }}</template>
+            </span>
+            <span class="truncate flex-1 min-w-0">{{ track.title }}</span>
+            <span v-if="track.performer" class="shrink-0 text-xs text-emerald-600 truncate max-w-[80px]">{{ track.performer }}</span>
           </button>
         </template>
         <template v-else-if="leftPanelTab === 'favorites' && favorites.length > 0">
@@ -84,7 +115,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 6l12-3M9 6v13"/>
           </svg>
           <p class="text-emerald-500/80 text-sm">
-            {{ leftPanelTab === 'favorites' ? (favoritesFolder ? '暂无收藏' : '请先设置收藏文件夹') : (playlist.length > 0 ? '无匹配结果' : '暂无曲目') }}
+            {{ leftPanelTab === 'cue' ? '当前文件无 CUE 曲目' : leftPanelTab === 'favorites' ? (favoritesFolder ? '暂无收藏' : '请先设置收藏文件夹') : (playlist.length > 0 ? '无匹配结果' : '暂无曲目') }}
           </p>
           <p v-if="leftPanelTab === 'playlist' && playlist.length === 0" class="text-emerald-600/70 text-xs mt-1">打开文件或文件夹添加</p>
           <p v-if="leftPanelTab === 'favorites' && !favoritesFolder" class="text-emerald-600/70 text-xs mt-1">点击下方文件夹图标设置</p>
@@ -102,6 +133,13 @@
               </template>
             </template>
             <span v-else>暂无曲目</span>
+          </template>
+          <template v-else-if="leftPanelTab === 'cue'">
+            <span v-if="cueTracks.length > 0">共 {{ cueTracks.length }} 曲</span>
+            <template v-if="currentCueIndex >= 0">
+              <span class="text-emerald-600/60 mx-1">·</span>
+              <span class="text-emerald-400/90">第 {{ currentCueIndex + 1 }} 曲</span>
+            </template>
           </template>
           <template v-else>
             <span v-if="favoritesFolder">共 {{ favorites.length }} 首</span>
@@ -246,11 +284,8 @@
       <!-- 控制区：元信息 + 按钮 + 进度条 -->
       <div class="w-full max-w-sm mt-auto pt-3 border-t border-emerald-800/50 flex flex-col gap-3">
         <div class="text-center px-2 min-h-[2.5rem]">
-          <template v-if="trackMetadata?.title || trackMetadata?.artist">
-            <p class="text-emerald-300 text-sm font-medium truncate">{{ trackMetadata.title || currentFileName }}</p>
-            <p class="text-emerald-500/80 text-xs truncate">{{ [trackMetadata.artist, trackMetadata.album].filter(Boolean).join(' · ') }}</p>
-          </template>
-          <p v-else class="text-emerald-400/90 text-xs truncate">{{ currentFileName || '未选择音频文件' }}</p>
+          <p class="text-emerald-300 text-sm font-medium truncate">{{ currentTrackTitle || '未选择音频文件' }}</p>
+          <p v-if="currentTrackSubtitle" class="text-emerald-500/80 text-xs truncate">{{ currentTrackSubtitle }}</p>
         </div>
         <div class="flex items-center justify-center gap-2 flex-wrap">
           <button
@@ -409,6 +444,7 @@
               <p><strong class="text-emerald-200">音量</strong>：右侧滑块调节音量大小。</p>
               <p><strong class="text-emerald-200">播放列表</strong>：加载文件夹后显示，点击曲目可切换播放；当前曲目结束后自动播放下一首。</p>
               <p><strong class="text-emerald-200">收藏</strong>：点击心形按钮将当前曲目复制到收藏文件夹；需先设置收藏文件夹。</p>
+              <p><strong class="text-emerald-200">CUE 曲目</strong>：整轨专辑（单文件多曲目）若附带同名 .cue 文件，会显示「曲目」列表，可点击跳转、上一曲/下一曲在曲目间切换。</p>
               <p class="pt-2 border-t border-emerald-700 text-emerald-400">
                 <strong class="text-emerald-300">支持格式</strong>：MP3、WAV、OGG、M4A、FLAC、AAC
               </p>
@@ -423,6 +459,7 @@
 <script setup>
 import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
 
+// ---------- 播放状态 ----------
 const audioEl = ref(null)
 const currentSrc = ref('')
 const currentFileName = ref('')
@@ -432,21 +469,31 @@ const currentTime = ref(0)
 const duration = ref(0)
 const volume = ref(0.8)
 const progress = ref(0)
+const coverBlobUrl = ref('')
+const trackMetadata = ref(null)
+
+// ---------- 播放列表 ----------
 const playlist = ref([])
 const currentIndex = ref(-1)
-const coverBlobUrl = ref('')
-const playlistCollapsed = ref(false)
-const trackMetadata = ref(null)
+const cueTracks = ref([])
+
+// ---------- 收藏 ----------
+const favorites = ref([])
+const favoritesFolder = ref(null)
+const currentFavoritesIndex = ref(-1)
+
+// ---------- 歌词 ----------
 const lyrics = ref([])
 const currentLyricIndex = ref(-1)
 const lyricsLoaded = ref(false)
 const lyricsContainer = ref(null)
+
+// ---------- UI 状态 ----------
+const playlistCollapsed = ref(false)
+const leftPanelTab = ref('playlist')
 const showLyrics = ref(false)
 const showHelp = ref(false)
-const leftPanelTab = ref('playlist')
-const favorites = ref([])
-const favoritesFolder = ref(null)
-const currentFavoritesIndex = ref(-1)
+const playlistSearchQuery = ref('')
 const volumeControlVisible = ref(false)
 const volumeControlRef = ref(null)
 
@@ -465,16 +512,8 @@ onMounted(async () => {
 onUnmounted(() => {
   if (volumeClickOutsideHandler) document.removeEventListener('click', volumeClickOutsideHandler)
 })
-const playlistSearchQuery = ref('')
 
-const filteredPlaylist = computed(() => {
-  const q = playlistSearchQuery.value.trim().toLowerCase()
-  if (!q) return playlist.value.map((item, i) => ({ item, originalIndex: i }))
-  return playlist.value
-    .map((item, i) => ({ item, originalIndex: i }))
-    .filter(({ item }) => item.name.toLowerCase().includes(q))
-})
-
+// ---------- 工具函数 ----------
 const getFileName = (url) => {
   try {
     return decodeURIComponent(url.split('/').pop() || url.split('\\').pop() || '音频文件')
@@ -482,8 +521,16 @@ const getFileName = (url) => {
     return '音频文件'
   }
 }
-
 const stripExt = (name) => name.replace(/\.[^.]+$/, '') || name
+
+// ---------- 计算属性 ----------
+const filteredPlaylist = computed(() => {
+  const q = playlistSearchQuery.value.trim().toLowerCase()
+  if (!q) return playlist.value.map((item, i) => ({ item, originalIndex: i }))
+  return playlist.value
+    .map((item, i) => ({ item, originalIndex: i }))
+    .filter(({ item }) => item.name.toLowerCase().includes(q))
+})
 
 const isCurrentInFavorites = computed(() =>
   currentSrc.value && favorites.value.some((f) => getFileName(f.url) === getFileName(currentSrc.value))
@@ -505,16 +552,44 @@ const setFavoritesFolder = async () => {
   }
 }
 
+const currentCueIndex = computed(() => {
+  const tracks = cueTracks.value
+  const t = currentTime.value
+  if (!tracks.length || !isFinite(t)) return -1
+  for (let i = tracks.length - 1; i >= 0; i--) {
+    if (t >= tracks[i].start) return i
+  }
+  return 0
+})
+
 const canPrev = computed(() => {
+  if (cueTracks.value.length && currentCueIndex.value > 0) return true
   if (currentFavoritesIndex.value >= 0) return currentFavoritesIndex.value > 0
   return playlist.value.length > 0 && currentIndex.value > 0
 })
 
 const canNext = computed(() => {
+  if (cueTracks.value.length && currentCueIndex.value >= 0 && currentCueIndex.value < cueTracks.value.length - 1) return true
   if (currentFavoritesIndex.value >= 0) return currentFavoritesIndex.value < favorites.value.length - 1
   return playlist.value.length > 0 && currentIndex.value < playlist.value.length - 1
 })
 
+const currentTrackTitle = computed(() => {
+  if (cueTracks.value.length && currentCueIndex.value >= 0) {
+    return cueTracks.value[currentCueIndex.value]?.title || currentFileName.value
+  }
+  return trackMetadata.value?.title || currentFileName.value
+})
+
+const currentTrackSubtitle = computed(() => {
+  if (cueTracks.value.length && currentCueIndex.value >= 0) {
+    const parts = [cueTracks.value[currentCueIndex.value]?.performer, trackMetadata.value?.album].filter(Boolean)
+    return parts.length ? parts.join(' · ') : stripExt(currentFileName.value)
+  }
+  return [trackMetadata.value?.artist, trackMetadata.value?.album].filter(Boolean).join(' · ') || ''
+})
+
+// ---------- 收藏 ----------
 const playFromFavorites = async (item) => {
   const idx = favorites.value.findIndex((f) => f.url === item.url)
   currentFavoritesIndex.value = idx >= 0 ? idx : -1
@@ -524,7 +599,21 @@ const playFromFavorites = async (item) => {
   audioEl.value?.play()
 }
 
+// ---------- CUE 曲目 ----------
+const seekToCueTrack = (idx) => {
+  const track = cueTracks.value[idx]
+  if (!track || !audioEl.value) return
+  audioEl.value.currentTime = track.start
+  currentTime.value = track.start
+  progress.value = track.start
+}
+
+// ---------- 播放控制 ----------
 const playPrev = async () => {
+  if (cueTracks.value.length && currentCueIndex.value > 0) {
+    seekToCueTrack(currentCueIndex.value - 1)
+    return
+  }
   if (currentFavoritesIndex.value > 0) {
     const idx = currentFavoritesIndex.value - 1
     currentFavoritesIndex.value = idx
@@ -538,6 +627,10 @@ const playPrev = async () => {
 }
 
 const playNext = async () => {
+  if (cueTracks.value.length && currentCueIndex.value >= 0 && currentCueIndex.value < cueTracks.value.length - 1) {
+    seekToCueTrack(currentCueIndex.value + 1)
+    return
+  }
   if (currentFavoritesIndex.value >= 0 && currentFavoritesIndex.value < favorites.value.length - 1) {
     const idx = currentFavoritesIndex.value + 1
     currentFavoritesIndex.value = idx
@@ -573,6 +666,7 @@ const removeFromFavorites = async (item) => {
   }
 }
 
+// ---------- 歌词 ----------
 function parseLrc(text) {
   const lines = []
   const regex = /\[(\d{1,2}):(\d{2})(?:\.(\d{2,3}))?](.*)/g
@@ -625,6 +719,7 @@ const togglePlay = () => {
   }
 }
 
+// ---------- 加载 ----------
 const loadCover = async (coverUrl) => {
   if (coverBlobUrl.value) {
     URL.revokeObjectURL(coverBlobUrl.value)
@@ -645,6 +740,7 @@ const loadCover = async (coverUrl) => {
 
 const loadTrack = async (url, coverUrl, lrcUrl) => {
   trackMetadata.value = null
+  cueTracks.value = []
   if (currentBlobUrl.value) {
     URL.revokeObjectURL(currentBlobUrl.value)
     currentBlobUrl.value = ''
@@ -674,6 +770,13 @@ const loadTrack = async (url, coverUrl, lrcUrl) => {
     } catch (_) {
       if (coverUrl) await loadCover(coverUrl)
     }
+    try {
+      const tracks = await window.electronAPI?.getCueTracks?.(url)
+      if (tracks?.length) {
+        cueTracks.value = tracks
+        leftPanelTab.value = 'cue'
+      }
+    } catch (_) {}
   } else if (coverUrl) {
     await loadCover(coverUrl)
   }
@@ -702,6 +805,7 @@ const playTrack = async (idx) => {
   audioEl.value?.play()
 }
 
+// ---------- 文件操作 ----------
 const openFile = async () => {
   if (!window.electronAPI?.openAudioFile) return
   const result = await window.electronAPI.openAudioFile()
@@ -746,6 +850,7 @@ const openFolder = async () => {
   }
 }
 
+// ---------- 事件 ----------
 const onSeek = (e) => {
   if (!audioEl.value) return
   const val = parseFloat(e.target.value)
