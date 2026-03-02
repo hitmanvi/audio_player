@@ -83,7 +83,9 @@ function scanDirForAudio(dirPath) {
   } catch (err) {
     console.error("scanDirForAudio error:", err);
   }
-  return results.sort();
+  return results.sort(
+    (a, b) => path.basename(a).localeCompare(path.basename(b), void 0, { numeric: true })
+  );
 }
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
 process.env.APP_ROOT = path.join(__dirname$1, "../..");

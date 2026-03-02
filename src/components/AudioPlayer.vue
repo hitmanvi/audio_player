@@ -26,7 +26,7 @@
               </svg>
               <template v-else>{{ idx + 1 }}</template>
             </span>
-            <span class="truncate flex-1 min-w-0">{{ entry.item.name }}</span>
+            <span class="truncate flex-1 min-w-0">{{ stripExt(entry.item.name) }}</span>
           </button>
         </template>
         <div v-else class="flex flex-col items-center justify-center py-12 px-4 text-center">
@@ -325,6 +325,8 @@ const getFileName = (url) => {
     return '音频文件'
   }
 }
+
+const stripExt = (name) => name.replace(/\.[^.]+$/, '') || name
 
 function parseLrc(text) {
   const lines = []

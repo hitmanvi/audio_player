@@ -93,7 +93,9 @@ function scanDirForAudio(dirPath) {
   } catch (err) {
     console.error('scanDirForAudio error:', err)
   }
-  return results.sort()
+  return results.sort((a, b) =>
+    path.basename(a).localeCompare(path.basename(b), undefined, { numeric: true })
+  )
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
