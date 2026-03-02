@@ -4,14 +4,14 @@
 
     <!-- 播放列表 - 左侧独立区域 -->
     <aside
-      class="shrink-0 flex flex-col border-r border-emerald-900 bg-emerald-900/30 transition-all duration-300 ease-in-out overflow-hidden"
+      class="shrink-0 flex flex-col border-r border-emerald-800/60 bg-emerald-950/50 transition-all duration-300 ease-in-out overflow-hidden"
       :class="playlistCollapsed ? 'w-0 min-w-0 border-r-0' : 'w-64'"
     >
-      <div class="flex items-center justify-between px-4 py-3 border-b border-emerald-800 shrink-0 w-64">
-        <h2 class="text-xs font-medium uppercase tracking-wider text-emerald-500">播放列表</h2>
+      <div class="flex items-center justify-between px-4 py-2.5 border-b border-emerald-800/50 shrink-0 w-64">
+        <h2 class="text-xs font-semibold uppercase tracking-widest text-emerald-400/90">播放列表</h2>
         <button
           type="button"
-          class="p-1 rounded text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/50 transition-colors"
+          class="p-1.5 rounded-md text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
           title="收起播放列表"
           @click="playlistCollapsed = true"
         >
@@ -20,21 +20,35 @@
           </svg>
         </button>
       </div>
-      <div class="flex-1 min-h-0 overflow-y-auto w-64 shrink-0">
+      <div class="playlist-scroll flex-1 min-h-0 overflow-y-auto w-64 shrink-0 py-2 px-2">
         <template v-if="playlist.length > 0">
           <button
             v-for="(item, idx) in playlist"
             :key="item.url"
             type="button"
-            class="w-full text-left px-4 py-2.5 text-sm truncate transition-colors border-b border-emerald-800/50 last:border-0"
-            :class="idx === currentIndex ? 'bg-emerald-500/20 text-emerald-300' : 'text-emerald-400/80 hover:bg-emerald-800/40 hover:text-emerald-200'"
+            class="w-full text-left px-3 py-2.5 rounded-lg text-sm truncate transition-all duration-200 flex items-center gap-3 group"
+            :class="idx === currentIndex ? 'bg-emerald-500/25 text-emerald-200 shadow-sm' : 'text-emerald-400/70 hover:bg-emerald-800/30 hover:text-emerald-300'"
             @click="playTrack(idx)"
           >
-            <span class="text-emerald-600 mr-2">{{ idx + 1 }}.</span>
-            {{ item.name }}
+            <span
+              class="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-colors"
+              :class="idx === currentIndex ? 'bg-emerald-500/40 text-emerald-200' : 'bg-emerald-800/50 text-emerald-500/80 group-hover:bg-emerald-700/50'"
+            >
+              <svg v-if="idx === currentIndex && isPlaying" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+              </svg>
+              <template v-else>{{ idx + 1 }}</template>
+            </span>
+            <span class="truncate flex-1 min-w-0">{{ item.name }}</span>
           </button>
         </template>
-        <p v-else class="px-4 py-8 text-emerald-600 text-sm text-center">暂无曲目<br><span class="text-xs">打开文件或文件夹添加</span></p>
+        <div v-else class="flex flex-col items-center justify-center py-12 px-4 text-center">
+          <svg class="w-12 h-12 text-emerald-700/60 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 6l12-3M9 6v13"/>
+          </svg>
+          <p class="text-emerald-500/80 text-sm">暂无曲目</p>
+          <p class="text-emerald-600/70 text-xs mt-1">打开文件或文件夹添加</p>
+        </div>
       </div>
     </aside>
 
@@ -439,6 +453,14 @@ watch(volume, (v) => {
   -ms-overflow-style: none;
 }
 .lyrics-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.playlist-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.playlist-scroll::-webkit-scrollbar {
   display: none;
 }
 
