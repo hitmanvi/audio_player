@@ -1,85 +1,163 @@
 <template>
-  <div class="w-full max-w-md rounded-2xl bg-slate-900/80 backdrop-blur border border-slate-700/50 p-6 shadow-xl">
-    <audio ref="audioEl" :src="currentSrc" @loadedmetadata="onLoadedMetadata" @timeupdate="onTimeUpdate" @ended="onEnded" @play="isPlaying = true" @pause="isPlaying = false" />
-    <!-- 封面/占位 -->
-    <div class="aspect-square w-full max-w-[200px] mx-auto mb-6 rounded-xl bg-slate-800 flex items-center justify-center">
-      <svg v-if="!currentSrc" class="w-16 h-16 text-slate-600" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-      </svg>
-      <div v-else class="w-full h-full flex items-center justify-center">
-        <div class="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center">
-          <svg class="w-10 h-10 text-emerald-400" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z"/>
+  <div class="flex h-full overflow-hidden">
+    <audio ref="audioEl" :src="currentBlobUrl" @loadedmetadata="onLoadedMetadata" @timeupdate="onTimeUpdate" @ended="onEnded" @play="isPlaying = true" @pause="isPlaying = false" />
+
+    <!-- 播放列表 - 左侧独立区域 -->
+    <aside
+      class="shrink-0 flex flex-col border-r border-emerald-900 bg-emerald-900/30 transition-all duration-300 ease-in-out overflow-hidden"
+      :class="playlistCollapsed ? 'w-0 min-w-0 border-r-0' : 'w-64'"
+    >
+      <div class="flex items-center justify-between px-4 py-3 border-b border-emerald-800 shrink-0 w-64">
+        <h2 class="text-xs font-medium uppercase tracking-wider text-emerald-500">播放列表</h2>
+        <button
+          type="button"
+          class="p-1 rounded text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/50 transition-colors"
+          title="收起播放列表"
+          @click="playlistCollapsed = true"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
           </svg>
+        </button>
+      </div>
+      <div class="flex-1 min-h-0 overflow-y-auto w-64 shrink-0">
+        <template v-if="playlist.length > 0">
+          <button
+            v-for="(item, idx) in playlist"
+            :key="item.url"
+            type="button"
+            class="w-full text-left px-4 py-2.5 text-sm truncate transition-colors border-b border-emerald-800/50 last:border-0"
+            :class="idx === currentIndex ? 'bg-emerald-500/20 text-emerald-300' : 'text-emerald-400/80 hover:bg-emerald-800/40 hover:text-emerald-200'"
+            @click="playTrack(idx)"
+          >
+            <span class="text-emerald-600 mr-2">{{ idx + 1 }}.</span>
+            {{ item.name }}
+          </button>
+        </template>
+        <p v-else class="px-4 py-8 text-emerald-600 text-sm text-center">暂无曲目<br><span class="text-xs">打开文件或文件夹添加</span></p>
+      </div>
+    </aside>
+
+    <!-- 播放器 - 右侧独立区域 -->
+    <main class="flex-1 min-w-0 flex flex-col items-center justify-center p-8 bg-emerald-950 relative">
+      <!-- 收起时显示展开按钮 -->
+      <button
+        v-if="playlistCollapsed"
+        type="button"
+        class="absolute left-0 top-1/2 -translate-y-1/2 py-3 px-1 rounded-r-lg bg-emerald-900/80 border border-l-0 border-emerald-800 text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/60 transition-colors"
+        title="展开播放列表"
+        @click="playlistCollapsed = false"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+      <!-- 点唱机唱片 -->
+      <div class="relative mb-6">
+        <div
+          class="jukebox-record"
+          :class="{ 'jukebox-record--playing': isPlaying }"
+        >
+          <!-- 黑胶外圈 -->
+          <div class="record-outer">
+            <!-- 封面贴纸（唱片中心标签） -->
+            <div class="record-label">
+              <img
+                v-if="coverBlobUrl"
+                :src="coverBlobUrl"
+                alt="封面"
+                class="record-cover"
+              />
+              <svg v-else-if="!currentBlobUrl" class="w-12 h-12 text-emerald-700" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+              <div v-else class="w-full h-full flex items-center justify-center">
+                <svg class="w-12 h-12 text-emerald-400/70" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </div>
+            </div>
+            <!-- 中心轴孔 -->
+            <div class="record-hole" />
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- 文件名 -->
-    <p class="text-center text-slate-400 text-sm truncate mb-4 px-2">
-      {{ currentFileName || '未选择音频文件' }}
-    </p>
+      <!-- 文件名 -->
+      <p class="text-center text-emerald-400/90 text-sm truncate mb-4 px-2 max-w-xs mx-auto">
+        {{ currentFileName || '未选择音频文件' }}
+      </p>
 
-    <!-- 进度条 -->
-    <div class="mb-4">
-      <input
-        v-model.number="progress"
-        type="range"
-        min="0"
-        :max="duration || 0"
-        step="0.1"
-        class="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-slate-700 accent-emerald-500"
-        @input="onSeek"
-      />
-      <div class="flex justify-between text-xs text-slate-500 mt-1">
-        <span>{{ formatTime(currentTime) }}</span>
-        <span>{{ formatTime(duration) }}</span>
-      </div>
-    </div>
-
-    <!-- 控制按钮 -->
-    <div class="flex items-center justify-center gap-4">
-      <button
-        type="button"
-        class="p-2 rounded-full text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 transition-colors"
-        title="打开文件"
-        @click="openFile"
-      >
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-        </svg>
-      </button>
-
-      <button
-        type="button"
-        class="p-4 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        :title="isPlaying ? '暂停' : '播放'"
-        :disabled="!currentSrc"
-        @click="togglePlay"
-      >
-        <svg v-if="!isPlaying" class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M8 5v14l11-7z"/>
-        </svg>
-        <svg v-else class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-        </svg>
-      </button>
-
-      <!-- 音量 -->
-      <div class="flex items-center gap-2">
-        <svg class="w-5 h-5 text-slate-400" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-        </svg>
+      <!-- 进度条 -->
+      <div class="w-full max-w-sm mb-4">
         <input
-          v-model.number="volume"
+          v-model.number="progress"
           type="range"
           min="0"
-          max="1"
-          step="0.01"
-          class="w-20 h-1.5 rounded-full appearance-none cursor-pointer bg-slate-700 accent-emerald-500"
+          :max="duration || 0"
+          step="0.1"
+          class="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-emerald-800 accent-emerald-400"
+          @input="onSeek"
         />
+        <div class="flex justify-between text-xs text-emerald-600 mt-1">
+          <span>{{ formatTime(currentTime) }}</span>
+          <span>{{ formatTime(duration) }}</span>
+        </div>
       </div>
-    </div>
+
+      <!-- 控制按钮 -->
+      <div class="flex items-center justify-center gap-4">
+        <button
+          type="button"
+          class="p-2 rounded-full text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/50 transition-colors"
+          title="打开文件"
+          @click="openFile"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="p-2 rounded-full text-emerald-500 hover:text-emerald-300 hover:bg-emerald-800/50 transition-colors"
+          title="打开文件夹"
+          @click="openFolder"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          class="p-4 rounded-full bg-emerald-400 hover:bg-emerald-300 text-emerald-950 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          :title="isPlaying ? '暂停' : '播放'"
+          :disabled="!currentBlobUrl"
+          @click="togglePlay"
+        >
+          <svg v-if="!isPlaying" class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          <svg v-else class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+          </svg>
+        </button>
+
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+          </svg>
+          <input
+            v-model.number="volume"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            class="w-16 h-1.5 rounded-full appearance-none cursor-pointer bg-emerald-800 accent-emerald-400"
+          />
+        </div>
+      </div>
+    </main>
   </div>
 </template>
 
@@ -89,11 +167,24 @@ import { ref, watch } from 'vue'
 const audioEl = ref(null)
 const currentSrc = ref('')
 const currentFileName = ref('')
+const currentBlobUrl = ref('')
 const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
 const volume = ref(0.8)
 const progress = ref(0)
+const playlist = ref([])
+const currentIndex = ref(-1)
+const coverBlobUrl = ref('')
+const playlistCollapsed = ref(false)
+
+const getFileName = (url) => {
+  try {
+    return decodeURIComponent(url.split('/').pop() || url.split('\\').pop() || '音频文件')
+  } catch {
+    return '音频文件'
+  }
+}
 
 const formatTime = (seconds) => {
   if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return '0:00'
@@ -103,7 +194,7 @@ const formatTime = (seconds) => {
 }
 
 const togglePlay = () => {
-  if (!audioEl.value || !currentSrc.value) return
+  if (!audioEl.value || !currentBlobUrl.value) return
   if (isPlaying.value) {
     audioEl.value.pause()
   } else {
@@ -111,16 +202,83 @@ const togglePlay = () => {
   }
 }
 
+const loadCover = async (coverUrl) => {
+  if (coverBlobUrl.value) {
+    URL.revokeObjectURL(coverBlobUrl.value)
+    coverBlobUrl.value = ''
+  }
+  if (coverUrl && coverUrl.startsWith('local-file://')) {
+    try {
+      const res = await fetch(coverUrl)
+      if (res.ok) {
+        const blob = await res.blob()
+        coverBlobUrl.value = URL.createObjectURL(blob)
+      }
+    } catch (err) {
+      console.error('加载封面失败:', err)
+    }
+  }
+}
+
+const loadTrack = async (url, coverUrl) => {
+  if (currentBlobUrl.value) {
+    URL.revokeObjectURL(currentBlobUrl.value)
+    currentBlobUrl.value = ''
+  }
+  currentSrc.value = url
+  currentFileName.value = getFileName(url)
+  progress.value = 0
+  currentTime.value = 0
+  duration.value = 0
+  if (coverUrl) await loadCover(coverUrl)
+  else if (coverBlobUrl.value) {
+    URL.revokeObjectURL(coverBlobUrl.value)
+    coverBlobUrl.value = ''
+  }
+  if (url && url.startsWith('local-file://')) {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(res.statusText)
+      const blob = await res.blob()
+      currentBlobUrl.value = URL.createObjectURL(blob)
+    } catch (err) {
+      console.error('加载音频失败:', err)
+    }
+  } else {
+    currentBlobUrl.value = url || ''
+  }
+}
+
+const playTrack = async (idx) => {
+  if (idx < 0 || idx >= playlist.value.length) return
+  currentIndex.value = idx
+  const item = playlist.value[idx]
+  await loadTrack(item.url, item.coverUrl)
+  isPlaying.value = true
+  audioEl.value?.play()
+}
+
 const openFile = async () => {
   if (!window.electronAPI?.openAudioFile) return
-  const fileUrl = await window.electronAPI.openAudioFile()
-  if (fileUrl) {
-    currentSrc.value = fileUrl
-    currentFileName.value = decodeURIComponent(fileUrl.split('/').pop() || fileUrl.split('\\').pop() || '音频文件')
+  const result = await window.electronAPI.openAudioFile()
+  if (result?.url) {
+    playlist.value = [{ url: result.url, name: getFileName(result.url), coverUrl: result.coverUrl }]
+    currentIndex.value = 0
+    await loadTrack(result.url, result.coverUrl)
     isPlaying.value = false
-    progress.value = 0
-    currentTime.value = 0
-    duration.value = 0
+  }
+}
+
+const openFolder = async () => {
+  if (!window.electronAPI?.openAudioFolder) return
+  const result = await window.electronAPI.openAudioFolder()
+  if (result?.urls?.length > 0) {
+    const coverUrl = result.coverUrl || null
+    playlist.value = result.urls.map((url) => ({ url, name: getFileName(url), coverUrl }))
+    currentIndex.value = 0
+    await loadTrack(result.urls[0], coverUrl)
+    isPlaying.value = true
+    audioEl.value?.play()
   }
 }
 
@@ -146,9 +304,88 @@ const onEnded = () => {
   isPlaying.value = false
   progress.value = 0
   currentTime.value = 0
+  if (playlist.value.length > 0 && currentIndex.value < playlist.value.length - 1) {
+    playTrack(currentIndex.value + 1)
+  }
 }
 
 watch(volume, (v) => {
   if (audioEl.value) audioEl.value.volume = v
 })
 </script>
+
+<style scoped>
+.jukebox-record {
+  --record-size: 200px;
+  --label-size: 55%;
+  --hole-size: 12%;
+  width: var(--record-size);
+  height: var(--record-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jukebox-record--playing .record-outer {
+  animation: record-spin 3.5s linear infinite;
+}
+
+@keyframes record-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.record-outer {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 30% 30%,
+    #0f2e24 0%,
+    #052e20 25%,
+    #022c22 50%,
+    #064e3b 75%,
+    #065f46 100%
+  );
+  box-shadow:
+    inset 0 0 20px rgba(0,0,0,0.6),
+    inset 0 0 60px rgba(0,0,0,0.3),
+    0 4px 20px rgba(0,0,0,0.4),
+    0 0 0 1px rgba(52,211,153,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.record-label {
+  width: var(--label-size);
+  height: var(--label-size);
+  border-radius: 50%;
+  overflow: hidden;
+  background: linear-gradient(135deg, #064e3b 0%, #022c22 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
+  flex-shrink: 0;
+}
+
+.record-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.record-hole {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--hole-size);
+  height: var(--hole-size);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #022c22, #011c15);
+  box-shadow: inset 0 1px 3px rgba(52,211,153,0.06), 0 1px 2px rgba(0,0,0,0.6);
+}
+</style>
