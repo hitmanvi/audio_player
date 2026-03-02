@@ -85,14 +85,14 @@
           <div
             v-show="showLyrics"
             ref="lyricsContainer"
-            class="w-full h-full overflow-y-auto px-4 py-2 scroll-smooth"
+            class="lyrics-scroll w-full h-full overflow-y-auto px-4 py-2 scroll-smooth"
           >
             <template v-if="lyrics.length > 0">
               <p
                 v-for="(line, i) in lyrics"
                 :key="i"
-                class="text-sm py-0.5 transition-colors"
-                :class="i === currentLyricIndex ? 'text-emerald-300 font-medium' : 'text-emerald-500/70'"
+                class="leading-relaxed py-1 transition-colors"
+                :class="i === currentLyricIndex ? 'text-lg text-emerald-300 font-medium' : 'text-base text-emerald-500/70'"
               >
                 {{ line.text }}
               </p>
@@ -434,6 +434,14 @@ watch(volume, (v) => {
 </script>
 
 <style scoped>
+.lyrics-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.lyrics-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .jukebox-record {
   --record-size: 160px;
   --label-size: 55%;
