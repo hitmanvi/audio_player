@@ -2,6 +2,19 @@ import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { TextDecoder } from 'node:util'
+
+/** 解码 LRC 文本，优先 UTF-8，失败则尝试 GBK（常见于中文歌词） */
+function decodeLrcBuffer(buf) {
+  try {
+    const utf8 = new TextDecoder('utf-8', { fatal: true }).decode(buf)
+    if (!utf8.includes('\uFFFD')) return utf8
+  } catch (_) {}
+  try {
+    return new TextDecoder('gbk').decode(buf)
+  } catch (_) {}
+  return new TextDecoder('utf-8', { fatal: false }).decode(buf)
+}
 
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac'])
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'])
@@ -20,6 +33,7 @@ const MIME_TYPES = {
   '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.bmp': 'image/bmp',
+  '.lrc': 'text/plain; charset=utf-8',
 }
 
 // 注册自定义协议，解决 http 页面加载 file:// 被阻止的问题
@@ -29,6 +43,18 @@ protocol.registerSchemesAsPrivileged([
 
 function toLocalFileUrl(filePath) {
   return pathToFileURL(path.resolve(filePath)).href.replace(/^file:\/\//, 'local-file://')
+}
+
+function findLrcForFile(audioPath) {
+  const dir = path.dirname(audioPath)
+  const base = path.basename(audioPath, path.extname(audioPath))
+  const lrcPath = path.join(dir, `${base}.lrc`)
+  try {
+    if (fs.existsSync(lrcPath)) return lrcPath
+  } catch (err) {
+    console.error('findLrcForFile error:', err)
+  }
+  return null
 }
 
 function findCoverInDir(dirPath) {
@@ -116,15 +142,30 @@ ipcMain.handle('open-audio-file', async () => {
     const filePath = result.filePaths[0]
     const dirPath = path.dirname(filePath)
     const coverPath = findCoverInDir(dirPath)
+    const lrcPath = findLrcForFile(filePath)
     return {
       url: toLocalFileUrl(filePath),
       coverUrl: coverPath ? toLocalFileUrl(coverPath) : null,
+      lrcUrl: lrcPath ? toLocalFileUrl(lrcPath) : null,
     }
   }
   return null
 })
 
-// 打开文件夹，返回 { urls, coverUrl }
+// 打开 LRC 歌词文件
+ipcMain.handle('open-lrc-file', async () => {
+  const win = mainWindow ?? BrowserWindow.getFocusedWindow()
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openFile'],
+    filters: [{ name: 'LRC 歌词', extensions: ['lrc'] }],
+  })
+  if (!result.canceled && result.filePaths.length > 0) {
+    return toLocalFileUrl(result.filePaths[0])
+  }
+  return null
+})
+
+// 打开文件夹，返回 { urls, coverUrl, lrcUrls }
 ipcMain.handle('open-audio-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
@@ -133,9 +174,14 @@ ipcMain.handle('open-audio-folder', async () => {
     const rootPath = result.filePaths[0]
     const paths = scanDirForAudio(rootPath)
     const coverPath = findCoverInDir(rootPath)
+    const lrcUrls = paths.map((p) => {
+      const lrc = findLrcForFile(p)
+      return lrc ? toLocalFileUrl(lrc) : null
+    })
     return {
       urls: paths.map((p) => toLocalFileUrl(p)),
       coverUrl: coverPath ? toLocalFileUrl(coverPath) : null,
+      lrcUrls,
     }
   }
   return null
@@ -144,9 +190,24 @@ ipcMain.handle('open-audio-folder', async () => {
 app.whenReady().then(async () => {
   protocol.handle('local-file', async (request) => {
     const fileUrl = request.url.replace(/^local-file:/, 'file:')
+    const filePath = fileURLToPath(fileUrl)
+    const ext = path.extname(filePath).toLowerCase()
+
+    // LRC 歌词：主进程读取并正确解码（支持 UTF-8 / GBK）
+    if (ext === '.lrc') {
+      try {
+        const buf = fs.readFileSync(filePath)
+        const text = decodeLrcBuffer(buf)
+        return new Response(text, {
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        })
+      } catch (err) {
+        console.error('read lrc error:', err)
+        return new Response('', { status: 500 })
+      }
+    }
+
     const response = await net.fetch(fileUrl)
-    const pathname = new URL(fileUrl).pathname
-    const ext = path.extname(decodeURIComponent(pathname)).toLowerCase()
     const mimeType = MIME_TYPES[ext] || 'application/octet-stream'
     return new Response(response.body, {
       status: response.status,
