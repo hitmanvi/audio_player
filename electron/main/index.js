@@ -3,7 +3,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { TextDecoder } from 'node:util'
-import { parseFile } from 'music-metadata'
+import { parseFile, selectCover } from 'music-metadata'
 
 /** 解码 LRC 文本，优先 UTF-8，失败则尝试 GBK（常见于中文歌词） */
 function decodeLrcBuffer(buf) {
@@ -217,12 +217,20 @@ ipcMain.handle('get-audio-metadata', async (_, fileUrl) => {
     if (!fs.existsSync(filePath)) return null
     const metadata = await parseFile(filePath)
     const common = metadata.common || {}
+    const picture = selectCover(common.picture) || common.picture?.[0]
+    let pictureDataUrl = null
+    if (picture?.data) {
+      const base64 = Buffer.from(picture.data).toString('base64')
+      const format = picture.format || 'image/jpeg'
+      pictureDataUrl = `data:${format};base64,${base64}`
+    }
     return {
       title: common.title,
       artist: common.artist,
       album: common.album,
       year: common.year,
       genre: common.genre?.[0],
+      picture: pictureDataUrl,
     }
   } catch (err) {
     console.error('get-audio-metadata error:', err)

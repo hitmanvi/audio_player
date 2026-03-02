@@ -654,16 +654,30 @@ const loadTrack = async (url, coverUrl, lrcUrl) => {
   progress.value = 0
   currentTime.value = 0
   duration.value = 0
-  if (coverUrl) await loadCover(coverUrl)
-  else if (coverBlobUrl.value) {
-    URL.revokeObjectURL(coverBlobUrl.value)
+  if (coverBlobUrl.value) {
+    if (coverBlobUrl.value.startsWith('blob:')) URL.revokeObjectURL(coverBlobUrl.value)
     coverBlobUrl.value = ''
   }
   if (url && url.startsWith('local-file://')) {
     try {
       const meta = await window.electronAPI?.getAudioMetadata?.(url)
-      if (meta) trackMetadata.value = meta
-    } catch (_) {}
+      if (meta) {
+        trackMetadata.value = meta
+        if (meta.picture) {
+          coverBlobUrl.value = meta.picture
+        } else if (coverUrl) {
+          await loadCover(coverUrl)
+        }
+      } else if (coverUrl) {
+        await loadCover(coverUrl)
+      }
+    } catch (_) {
+      if (coverUrl) await loadCover(coverUrl)
+    }
+  } else if (coverUrl) {
+    await loadCover(coverUrl)
+  }
+  if (url && url.startsWith('local-file://')) {
     try {
       const res = await fetch(url)
       if (!res.ok) throw new Error(res.statusText)
