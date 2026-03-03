@@ -418,6 +418,23 @@
               <path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z"/>
             </svg>
           </button>
+          <button
+            type="button"
+            class="btn-control"
+            :class="playMode !== 'sequential' ? 'btn-control--active' : ''"
+            :title="playMode === 'sequential' ? '顺序播放' : playMode === 'repeatAll' ? '列表循环' : '单曲循环'"
+            @click="cyclePlayMode"
+          >
+            <svg v-if="playMode === 'sequential'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <svg v-else-if="playMode === 'repeatAll'" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+            </svg>
+            <svg v-else class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+            </svg>
+          </button>
           <div ref="volumeControlRef" class="relative flex items-center">
             <button
               type="button"
@@ -519,6 +536,7 @@
               <p><strong class="text-emerald-200">打开文件</strong>：点击文件图标，选择单个音频文件播放。</p>
               <p><strong class="text-emerald-200">打开文件夹</strong>：点击文件夹图标，选择目录后自动加载其中所有音频文件（含子目录），并生成播放列表。</p>
               <p><strong class="text-emerald-200">播放/暂停</strong>：点击中央绿色按钮。</p>
+              <p><strong class="text-emerald-200">循环模式</strong>：点击循环图标切换「顺序播放」「列表循环」「单曲循环」。</p>
               <p><strong class="text-emerald-200">唱片/歌词</strong>：点击图标切换唱片封面或歌词显示。</p>
               <p><strong class="text-emerald-200">进度条</strong>：可拖动跳转到指定位置。</p>
               <p><strong class="text-emerald-200">音量</strong>：右侧滑块调节音量大小。</p>
@@ -577,6 +595,7 @@ const lyricsContainer = ref(null)
 // ---------- UI 状态 ----------
 const playlistCollapsed = ref(false)
 const leftPanelTab = ref('playlist')
+const playMode = ref('sequential') // sequential | repeatAll | repeatOne
 const showLyrics = ref(false)
 const showHelp = ref(false)
 const playlistSearchQuery = ref('')
@@ -1031,10 +1050,40 @@ const onTimeUpdate = () => {
   }
 }
 
+const cyclePlayMode = () => {
+  const modes = ['sequential', 'repeatAll', 'repeatOne']
+  const i = modes.indexOf(playMode.value)
+  playMode.value = modes[(i + 1) % modes.length]
+}
+
 const onEnded = () => {
+  if (playMode.value === 'repeatOne' && currentBlobUrl.value) {
+    if (audioEl.value) {
+      audioEl.value.currentTime = 0
+      audioEl.value.play()
+    }
+    return
+  }
   isPlaying.value = false
   progress.value = 0
   currentTime.value = 0
+  if (playMode.value === 'repeatAll') {
+    const hasNext = (currentFavoritesIndex.value >= 0 && currentFavoritesIndex.value < favorites.value.length - 1) ||
+      (playlist.value.length > 0 && currentIndex.value < playlist.value.length - 1)
+    if (!hasNext && (playlist.value.length > 0 || (currentFavoritesIndex.value >= 0 && favorites.value.length > 0))) {
+      if (currentFavoritesIndex.value >= 0) {
+        currentFavoritesIndex.value = 0
+        const item = favorites.value[0]
+        loadTrack(item.url, item.coverUrl, item.lrcUrl).then(() => {
+          isPlaying.value = true
+          audioEl.value?.play()
+        })
+      } else if (playlist.value.length > 0) {
+        playTrack(0)
+      }
+      return
+    }
+  }
   if (currentFavoritesIndex.value >= 0 && currentFavoritesIndex.value < favorites.value.length - 1) {
     const idx = currentFavoritesIndex.value + 1
     currentFavoritesIndex.value = idx
