@@ -1,14 +1,1 @@
-"use strict";
-const electron = require("electron");
-electron.contextBridge.exposeInMainWorld("electronAPI", {
-  addToFavorites: (fileUrl) => electron.ipcRenderer.invoke("add-to-favorites", fileUrl),
-  getAudioMetadata: (fileUrl) => electron.ipcRenderer.invoke("get-audio-metadata", fileUrl),
-  getCueTracks: (fileUrl) => electron.ipcRenderer.invoke("get-cue-tracks", fileUrl),
-  getFavoritesFolder: () => electron.ipcRenderer.invoke("get-favorites-folder"),
-  getFavoritesList: () => electron.ipcRenderer.invoke("get-favorites-list"),
-  openAudioFile: () => electron.ipcRenderer.invoke("open-audio-file"),
-  openAudioFolder: () => electron.ipcRenderer.invoke("open-audio-folder"),
-  openLrcFile: () => electron.ipcRenderer.invoke("open-lrc-file"),
-  removeFromFavorites: (fileUrl) => electron.ipcRenderer.invoke("remove-from-favorites", fileUrl),
-  setFavoritesFolder: () => electron.ipcRenderer.invoke("set-favorites-folder")
-});
+"use strict";const e=require("electron");e.contextBridge.exposeInMainWorld("electronAPI",{addToFavorites:r=>e.ipcRenderer.invoke("add-to-favorites",r),getAudioMetadata:r=>e.ipcRenderer.invoke("get-audio-metadata",r),getCueTracks:r=>e.ipcRenderer.invoke("get-cue-tracks",r),getFavoritesFolder:()=>e.ipcRenderer.invoke("get-favorites-folder"),getFavoritesList:()=>e.ipcRenderer.invoke("get-favorites-list"),openAudioFile:()=>e.ipcRenderer.invoke("open-audio-file"),openAudioFolder:()=>e.ipcRenderer.invoke("open-audio-folder"),openArtistFolder:()=>e.ipcRenderer.invoke("open-artist-folder"),openLrcFile:()=>e.ipcRenderer.invoke("open-lrc-file"),removeFromFavorites:r=>e.ipcRenderer.invoke("remove-from-favorites",r),setFavoritesFolder:()=>e.ipcRenderer.invoke("set-favorites-folder")});

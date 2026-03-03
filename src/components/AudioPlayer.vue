@@ -28,13 +28,21 @@
         <button
           type="button"
           class="flex-1 py-2 text-xs font-medium transition-colors"
+          :class="leftPanelTab === 'artist' ? 'bg-emerald-800/50 text-emerald-200' : 'text-emerald-500/80 hover:text-emerald-300'"
+          @click="leftPanelTab = 'artist'"
+        >
+          歌手
+        </button>
+        <button
+          type="button"
+          class="flex-1 py-2 text-xs font-medium transition-colors"
           :class="leftPanelTab === 'favorites' ? 'bg-emerald-800/50 text-emerald-200' : 'text-emerald-500/80 hover:text-emerald-300'"
           @click="leftPanelTab = 'favorites'; loadFavorites()"
         >
           收藏
         </button>
       </div>
-      <div class="playlist-scroll flex-1 min-h-0 overflow-y-auto w-64 shrink-0 py-2 px-2">
+      <div class="playlist-scroll flex-1 min-h-0 overflow-y-auto w-64 shrink-0 py-2 px-2" :key="leftPanelTab">
         <template v-if="leftPanelTab === 'playlist' && filteredPlaylist.length > 0">
           <button
             v-for="(entry, idx) in filteredPlaylist"
@@ -78,6 +86,49 @@
             <span v-if="track.performer" class="shrink-0 text-xs text-emerald-600 truncate max-w-[80px]">{{ track.performer }}</span>
           </button>
         </template>
+        <template v-else-if="leftPanelTab === 'artist' && artistAlbums.length > 0">
+          <div v-for="(album, albumIdx) in artistAlbums" :key="albumIdx" class="mb-2">
+            <button
+              type="button"
+              class="w-full text-left px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-emerald-800/30 transition-colors"
+              :class="expandedAlbums.has(albumIdx) ? 'bg-emerald-800/40 text-emerald-200' : 'text-emerald-400/90'"
+              @click="toggleAlbumExpand(albumIdx)"
+            >
+              <svg
+                class="w-4 h-4 shrink-0 transition-transform"
+                :class="expandedAlbums.has(albumIdx) ? 'rotate-90' : ''"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+              <span class="truncate flex-1">{{ album.name }}</span>
+              <span class="text-xs text-emerald-600 shrink-0">{{ album.tracks.length }} 首</span>
+            </button>
+            <div v-show="expandedAlbums.has(albumIdx)" class="pl-4 mt-1 space-y-0.5">
+              <button
+                v-for="(track, trackIdx) in album.tracks"
+                :key="track.url"
+                type="button"
+                class="w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-all duration-200 flex items-center gap-3 group"
+                :class="isCurrentArtistTrack(albumIdx, trackIdx) ? 'bg-emerald-500/25 text-emerald-200 shadow-sm' : 'text-emerald-400/70 hover:bg-emerald-800/30 hover:text-emerald-300'"
+                @click="playFromArtist(album, trackIdx)"
+              >
+                <span
+                  class="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-colors"
+                  :class="isCurrentArtistTrack(albumIdx, trackIdx) ? 'bg-emerald-500/40 text-emerald-200' : 'bg-emerald-800/50 text-emerald-500/80 group-hover:bg-emerald-700/50'"
+                >
+                  <svg v-if="isCurrentArtistTrack(albumIdx, trackIdx) && isPlaying" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                  </svg>
+                  <template v-else>{{ trackIdx + 1 }}</template>
+                </span>
+                <span class="truncate flex-1 min-w-0">{{ stripExt(track.name) }}</span>
+              </button>
+            </div>
+          </div>
+        </template>
         <template v-else-if="leftPanelTab === 'favorites' && favorites.length > 0">
           <div
             v-for="(item, idx) in favorites"
@@ -115,9 +166,10 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 6l12-3M9 6v13"/>
           </svg>
           <p class="text-emerald-500/80 text-sm">
-            {{ leftPanelTab === 'cue' ? '当前文件无 CUE 曲目' : leftPanelTab === 'favorites' ? (favoritesFolder ? '暂无收藏' : '请先设置收藏文件夹') : (playlist.length > 0 ? '无匹配结果' : '暂无曲目') }}
+            {{ leftPanelTab === 'cue' ? '当前文件无 CUE 曲目' : leftPanelTab === 'artist' ? '选择歌手文件夹（含多张专辑）' : leftPanelTab === 'favorites' ? (favoritesFolder ? '暂无收藏' : '请先设置收藏文件夹') : (playlist.length > 0 ? '无匹配结果' : '暂无曲目') }}
           </p>
           <p v-if="leftPanelTab === 'playlist' && playlist.length === 0" class="text-emerald-600/70 text-xs mt-1">打开文件或文件夹添加</p>
+          <p v-if="leftPanelTab === 'artist'" class="text-emerald-600/70 text-xs mt-1">点击下方歌手图标选择</p>
           <p v-if="leftPanelTab === 'favorites' && !favoritesFolder" class="text-emerald-600/70 text-xs mt-1">点击下方文件夹图标设置</p>
         </div>
       </div>
@@ -139,6 +191,13 @@
             <template v-if="currentCueIndex >= 0">
               <span class="text-emerald-600/60 mx-1">·</span>
               <span class="text-emerald-400/90">第 {{ currentCueIndex + 1 }} 曲</span>
+            </template>
+          </template>
+          <template v-else-if="leftPanelTab === 'artist'">
+            <span v-if="artistAlbums.length > 0">{{ artistName }} · {{ artistAlbums.length }} 张专辑</span>
+            <template v-if="currentIndex >= 0 && currentIndex < playlist.length">
+              <span class="text-emerald-600/60 mx-1">·</span>
+              <span class="text-emerald-400/90">第 {{ currentIndex + 1 }} 首</span>
             </template>
           </template>
           <template v-else>
@@ -178,16 +237,37 @@
                 </svg>
               </button>
             </template>
+            <template v-else-if="leftPanelTab === 'artist'">
+              <button
+                type="button"
+                class="p-2 rounded-lg text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
+                title="选择歌手文件夹"
+                @click="openArtistFolder"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 6l12-3M9 6v13"/>
+                </svg>
+              </button>
+            </template>
             <template v-else>
               <button
                 type="button"
                 class="p-2 rounded-lg text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
-                title="设置收藏文件夹"
+                :title="favoritesFolder ? '更新收藏路径' : '设置收藏文件夹'"
                 @click="setFavoritesFolder"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                 </svg>
+              </button>
+              <button
+                v-if="favoritesFolder"
+                type="button"
+                class="px-2 py-1 rounded-lg text-xs text-emerald-500/80 hover:text-emerald-300 hover:bg-emerald-800/40 transition-colors"
+                title="重新选择收藏文件夹"
+                @click="setFavoritesFolder"
+              >
+                更新路径
               </button>
             </template>
           </div>
@@ -445,6 +525,7 @@
               <p><strong class="text-emerald-200">播放列表</strong>：加载文件夹后显示，点击曲目可切换播放；当前曲目结束后自动播放下一首。</p>
               <p><strong class="text-emerald-200">收藏</strong>：点击心形按钮将当前曲目复制到收藏文件夹；需先设置收藏文件夹。</p>
               <p><strong class="text-emerald-200">CUE 曲目</strong>：整轨专辑（单文件多曲目）若附带同名 .cue 文件，会显示「曲目」列表，可点击跳转、上一曲/下一曲在曲目间切换。</p>
+              <p><strong class="text-emerald-200">歌手/专辑</strong>：点击「歌手」标签，选择歌手文件夹（其子文件夹为专辑），可展开专辑浏览曲目并播放。</p>
               <p class="pt-2 border-t border-emerald-700 text-emerald-400">
                 <strong class="text-emerald-300">支持格式</strong>：MP3、WAV、OGG、M4A、FLAC、AAC
               </p>
@@ -477,6 +558,11 @@ const playlist = ref([])
 const currentIndex = ref(-1)
 const cueTracks = ref([])
 
+// ---------- 歌手/专辑 ----------
+const artistAlbums = ref([])
+const artistName = ref('')
+const expandedAlbums = ref(new Set())
+
 // ---------- 收藏 ----------
 const favorites = ref([])
 const favoritesFolder = ref(null)
@@ -507,10 +593,15 @@ onMounted(async () => {
   document.addEventListener('click', volumeClickOutsideHandler)
   if (window.electronAPI?.getFavoritesFolder) {
     favoritesFolder.value = await window.electronAPI.getFavoritesFolder()
+    if (favoritesFolder.value) loadFavorites()
   }
 })
 onUnmounted(() => {
   if (volumeClickOutsideHandler) document.removeEventListener('click', volumeClickOutsideHandler)
+})
+
+watch(leftPanelTab, (tab) => {
+  if (tab === 'favorites') loadFavorites()
 })
 
 // ---------- 工具函数 ----------
@@ -550,6 +641,58 @@ const setFavoritesFolder = async () => {
     favoritesFolder.value = folder
     await loadFavorites()
   }
+}
+
+// ---------- 歌手/专辑 ----------
+const artistPlaylistFlat = computed(() =>
+  artistAlbums.value.flatMap((a) => a.tracks)
+)
+
+const openArtistFolder = async () => {
+  if (!window.electronAPI?.openArtistFolder) return
+  const result = await window.electronAPI.openArtistFolder()
+  if (result?.albums?.length > 0) {
+    artistName.value = result.artistName || '歌手'
+    artistAlbums.value = result.albums
+    expandedAlbums.value = new Set([0])
+    currentFavoritesIndex.value = -1
+    const flat = artistAlbums.value.flatMap((a) => a.tracks)
+    playlist.value = flat
+    currentIndex.value = -1
+  }
+}
+
+const toggleAlbumExpand = (albumIdx) => {
+  const next = new Set(expandedAlbums.value)
+  if (next.has(albumIdx)) next.delete(albumIdx)
+  else next.add(albumIdx)
+  expandedAlbums.value = next
+}
+
+const getArtistTrackFlatIndex = (albumIdx, trackIdx) => {
+  let idx = 0
+  for (let i = 0; i < albumIdx; i++) idx += artistAlbums.value[i].tracks.length
+  return idx + trackIdx
+}
+
+const isCurrentArtistTrack = (albumIdx, trackIdx) => {
+  const album = artistAlbums.value[albumIdx]
+  if (!album?.tracks[trackIdx]) return false
+  return currentSrc.value === album.tracks[trackIdx].url
+}
+
+const playFromArtist = async (album, trackIdx) => {
+  const flatIdx = getArtistTrackFlatIndex(
+    artistAlbums.value.findIndex((a) => a === album),
+    trackIdx
+  )
+  currentFavoritesIndex.value = -1
+  playlist.value = artistPlaylistFlat.value
+  currentIndex.value = flatIdx
+  const item = artistPlaylistFlat.value[flatIdx]
+  await loadTrack(item.url, item.coverUrl, item.lrcUrl)
+  isPlaying.value = true
+  audioEl.value?.play()
 }
 
 const currentCueIndex = computed(() => {
@@ -774,7 +917,8 @@ const loadTrack = async (url, coverUrl, lrcUrl) => {
       const tracks = await window.electronAPI?.getCueTracks?.(url)
       if (tracks?.length) {
         cueTracks.value = tracks
-        leftPanelTab.value = 'cue'
+        // 仅从播放列表切歌时自动切换到曲目，从收藏播放时保持收藏 tab
+        if (leftPanelTab.value === 'playlist') leftPanelTab.value = 'cue'
       }
     } catch (_) {}
   } else if (coverUrl) {

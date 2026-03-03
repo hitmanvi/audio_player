@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFavoritesList: () => ipcRenderer.invoke('get-favorites-list'),
   openAudioFile: () => ipcRenderer.invoke('open-audio-file'),
   openAudioFolder: () => ipcRenderer.invoke('open-audio-folder'),
+  openArtistFolder: () => ipcRenderer.invoke('open-artist-folder'),
   openLrcFile: () => ipcRenderer.invoke('open-lrc-file'),
   removeFromFavorites: (fileUrl) => ipcRenderer.invoke('remove-from-favorites', fileUrl),
   setFavoritesFolder: () => ipcRenderer.invoke('set-favorites-folder'),

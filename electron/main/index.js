@@ -175,6 +175,39 @@ function scanDirForAudio(dirPath) {
   )
 }
 
+/** 扫描歌手文件夹：返回 [{ name, coverUrl, tracks: [{ url, name, coverUrl, lrcUrl }] }] */
+function scanArtistFolder(artistPath) {
+  const albums = []
+  try {
+    const entries = fs.readdirSync(artistPath, { withFileTypes: true })
+    const subdirs = entries
+      .filter((e) => e.isDirectory())
+      .map((e) => ({ name: e.name, fullPath: path.join(artistPath, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    for (const { name, fullPath: albumPath } of subdirs) {
+      const paths = scanDirForAudio(albumPath)
+      if (paths.length === 0) continue
+      const coverPath = findCoverInDir(albumPath)
+      albums.push({
+        name,
+        coverUrl: coverPath ? toLocalFileUrl(coverPath) : null,
+        tracks: paths.map((p) => {
+          const lrc = findLrcForFile(p)
+          return {
+            url: toLocalFileUrl(p),
+            name: path.basename(p),
+            coverUrl: coverPath ? toLocalFileUrl(coverPath) : null,
+            lrcUrl: lrc ? toLocalFileUrl(lrc) : null,
+          }
+        }),
+      })
+    }
+  } catch (err) {
+    console.error('scanArtistFolder error:', err)
+  }
+  return albums
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 process.env.APP_ROOT = path.join(__dirname, '../..')
@@ -279,6 +312,22 @@ ipcMain.handle('open-audio-folder', async () => {
       urls: paths.map((p) => toLocalFileUrl(p)),
       coverUrl: coverPath ? toLocalFileUrl(coverPath) : null,
       lrcUrls,
+    }
+  }
+  return null
+})
+
+ipcMain.handle('open-artist-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+    title: '选择歌手文件夹',
+  })
+  if (!result.canceled && result.filePaths.length > 0) {
+    const artistPath = result.filePaths[0]
+    const albums = scanArtistFolder(artistPath)
+    return {
+      artistName: path.basename(artistPath),
+      albums,
     }
   }
   return null
